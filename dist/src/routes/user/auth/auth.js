@@ -1,0 +1,17 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const auth_1 = require("../../../controller/users/auth");
+const validation_1 = require("../../../middlewares/validation");
+const authenticated_1 = require("../../../middlewares/authenticated");
+const catchAsync_1 = require("../../../utils/catchAsync");
+const auth_2 = require("../../../validation/user/auth");
+const route = (0, express_1.Router)();
+route.post("/signup", (0, validation_1.validate)(auth_2.signupSchema), (0, catchAsync_1.catchAsync)(auth_1.signup));
+route.post("/login", (0, validation_1.validate)(auth_2.loginSchema), (0, catchAsync_1.catchAsync)(auth_1.login));
+route.post("/verify-email", (0, validation_1.validate)(auth_2.verifyEmailSchema), (0, catchAsync_1.catchAsync)(auth_1.verifyEmail));
+route.post("/forgot-password", (0, validation_1.validate)(auth_2.sendResetCodeSchema), auth_1.sendResetCode);
+route.post("/verify-code", (0, validation_1.validate)(auth_2.checkResetCodeSchema), (0, catchAsync_1.catchAsync)(auth_1.verifyResetCode));
+route.post("/reset-password", (0, validation_1.validate)(auth_2.resetPasswordSchema), auth_1.resetPassword);
+route.post("/fcm-token", authenticated_1.authenticated, (0, catchAsync_1.catchAsync)(auth_1.getFcmToken));
+exports.default = route;

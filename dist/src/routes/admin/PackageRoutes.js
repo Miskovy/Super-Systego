@@ -1,0 +1,16 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.PackageRouter = void 0;
+const express_1 = require("express");
+const PackageController_1 = require("../../controller/admin/PackageController");
+// import { authenticated } from '../../middlewares/authenticated';
+const catchAsync_1 = require("../../utils/catchAsync");
+const authenticated_1 = require("../../middlewares/authenticated");
+exports.PackageRouter = (0, express_1.Router)();
+exports.PackageRouter.use(authenticated_1.authenticated);
+exports.PackageRouter.get('/', (0, catchAsync_1.catchAsync)(PackageController_1.view));
+exports.PackageRouter.get('/:id', (0, catchAsync_1.catchAsync)(PackageController_1.getById));
+exports.PackageRouter.post('/add', (0, catchAsync_1.catchAsync)(PackageController_1.create));
+exports.PackageRouter.put('/update/:id', (0, catchAsync_1.catchAsync)(PackageController_1.modify));
+exports.PackageRouter.delete('/delete_item/:id', (0, catchAsync_1.catchAsync)(PackageController_1.delete_item));
+exports.default = exports.PackageRouter;

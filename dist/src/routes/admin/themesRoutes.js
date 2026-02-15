@@ -1,0 +1,15 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const themesController_1 = require("../../controller/admin/themesController");
+const themesValidator_1 = require("../../validation/admin/themesValidator");
+const validation_1 = require("../../middlewares/validation");
+const authenticated_1 = require("../../middlewares/authenticated");
+const router = (0, express_1.Router)();
+router.use(authenticated_1.authenticated);
+router.get('/', themesController_1.getAllThemes);
+router.get('/:id', themesController_1.getThemeById);
+router.post('/', (0, validation_1.validate)(themesValidator_1.createThemeValidator), themesController_1.createTheme);
+router.put('/:id', (0, validation_1.validate)(themesValidator_1.updateThemeValidator), themesController_1.updateTheme);
+router.delete('/:id', themesController_1.deleteTheme);
+exports.default = router;
