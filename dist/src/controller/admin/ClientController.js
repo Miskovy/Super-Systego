@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getClientsByStatus = exports.deleteClient = exports.updateClient = exports.createClient = exports.getClientById = exports.getAllClients = void 0;
+exports.select = exports.getClientsByStatus = exports.deleteClient = exports.updateClient = exports.createClient = exports.getClientById = exports.getAllClients = void 0;
 const Client_1 = require("../../models/shema/auth/Client");
 const express_async_handler_1 = __importDefault(require("express-async-handler"));
 const NotFound_1 = require("../../Errors/NotFound");
@@ -70,4 +70,10 @@ exports.getClientsByStatus = (0, express_async_handler_1.default)(async (req, re
         .sort({ created_at: -1 })
         .populate('package_id');
     return (0, response_1.SuccessResponse)(res, { message: `Clients with status ${status} retrieved successfully`, data: clients }, 200);
+});
+exports.select = (0, express_async_handler_1.default)(async (req, res) => {
+    const packages = await Package_1.PackageModel.find()
+        .select('name')
+        .sort({ created_at: -1 });
+    return (0, response_1.SuccessResponse)(res, { message: 'Packages retrieved successfully', data: packages }, 200);
 });

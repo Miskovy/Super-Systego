@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { getAllClients, getClientById, createClient, updateClient, deleteClient } from '../../controller/admin/ClientController';
+import { getAllClients, getClientById, createClient, 
+    updateClient, deleteClient,select } from '../../controller/admin/ClientController';
 import { createClientValidator, updateClientValidator } from '../../validation/admin/clientValidator';
 import { validate } from '../../middlewares/validation';
  import { authenticated } from '../../middlewares/authenticated';
@@ -8,6 +9,7 @@ const router = Router();
 router.use(authenticated);
 
 
+router.get('/select', select);
 router.get('/', getAllClients);
 router.get('/:id', getClientById);
 router.post('/', validate(createClientValidator), createClient);

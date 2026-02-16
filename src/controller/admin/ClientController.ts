@@ -88,3 +88,11 @@ export const getClientsByStatus = asyncHandler(async (req, res) => {
 
   return SuccessResponse(res, { message: `Clients with status ${status} retrieved successfully`, data: clients }, 200);
 });
+
+export const select =asyncHandler(async (req, res) => {
+  const packages = await PackageModel.find()
+    .select('name')
+    .sort({ created_at: -1 });
+
+  return SuccessResponse(res, { message: 'Packages retrieved successfully', data: packages }, 200);
+});

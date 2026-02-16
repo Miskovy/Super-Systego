@@ -4,9 +4,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PackageModel = void 0;
-const mongoose_1 = require("mongoose");
-const mongoose_2 = __importDefault(require("mongoose"));
-const PackageSchema = new mongoose_1.Schema({
+const mongoose_1 = __importDefault(require("mongoose"));
+const PackageSchema = new mongoose_1.default.Schema({
     name: { type: String, },
     description: { type: String, },
     monthly_price: { type: Number, required: true },
@@ -15,4 +14,4 @@ const PackageSchema = new mongoose_1.Schema({
     yearly_price: { type: Number, required: true },
     status: { type: Boolean },
 }, { timestamps: true, });
-exports.PackageModel = mongoose_2.default.model('Package', PackageSchema);
+exports.PackageModel = mongoose_1.default.model('Package', PackageSchema);

@@ -4,17 +4,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ThemeModel = void 0;
-const mongoose_1 = require("mongoose");
-const mongoose_2 = __importDefault(require("mongoose"));
-const ThemeSchema = new mongoose_1.Schema({
-    name: {
-        type: String, required: true
-    },
-    description: {
-        type: String
-    },
-    theme: {
-        type: String, required: true
-    },
+const mongoose_1 = __importDefault(require("mongoose"));
+const ThemeSchema = new mongoose_1.default.Schema({
+    name: { type: String, required: true },
+    description: { type: String },
+    theme: { type: String, required: true },
 }, { timestamps: true, });
-exports.ThemeModel = mongoose_2.default.model('Theme', ThemeSchema);
+exports.ThemeModel = mongoose_1.default.model('Theme', ThemeSchema);
