@@ -7,6 +7,7 @@ const validation_1 = require("../../middlewares/validation");
 const authenticated_1 = require("../../middlewares/authenticated");
 const router = (0, express_1.Router)();
 router.use(authenticated_1.authenticated);
+router.get('/select', ClientController_1.select);
 router.get('/', ClientController_1.getAllClients);
 router.get('/:id', ClientController_1.getClientById);
 router.post('/', (0, validation_1.validate)(clientValidator_1.createClientValidator), ClientController_1.createClient);

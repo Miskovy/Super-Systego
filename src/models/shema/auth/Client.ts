@@ -8,6 +8,7 @@ interface IClient {
   password?: string;
   status?: string;
   package_id?: Types.ObjectId;
+  db_name?: string;
 }
 
 const ClientSchema = new Schema<IClient>(
@@ -17,6 +18,7 @@ const ClientSchema = new Schema<IClient>(
     password: { type: String },
     status: { type: String },
     package_id: { type: Schema.Types.ObjectId, ref: 'Package' },
+    db_name: { type: String },
   },
   { timestamps: true, }
 );

@@ -13,6 +13,7 @@ const ClientSchema = new mongoose_1.Schema({
     password: { type: String },
     status: { type: String },
     package_id: { type: mongoose_1.Schema.Types.ObjectId, ref: 'Package' },
+    db_name: { type: String },
 }, { timestamps: true, });
 ClientSchema.pre("save", async function (next) {
     if (!this.isModified("password") || !this.password)
