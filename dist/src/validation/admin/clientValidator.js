@@ -33,6 +33,16 @@ exports.createClientValidator = joi_1.default.object({
         .messages({
         'string.hex': 'Package ID must be a valid hexadecimal string',
         'string.length': 'Package ID must be exactly 24 characters long'
+    }),
+    subdomain: joi_1.default.string().trim().lowercase().min(3).max(63)
+        .pattern(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/)
+        .required()
+        .messages({
+        'string.empty': 'Subdomain name is required',
+        'string.min': 'Subdomain name must be at least 3 characters long',
+        'string.max': 'Subdomain name cannot exceed 63 characters',
+        'string.pattern.base': 'Subdomain must contain only lowercase letters, numbers, and hyphens. Cannot start or end with a hyphen.',
+        'any.required': 'Subdomain name is required'
     })
 });
 exports.updateClientValidator = joi_1.default.object({
