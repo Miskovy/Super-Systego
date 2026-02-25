@@ -145,7 +145,12 @@ export const createClient = asyncHandler(async (req, res) => {
     } catch (dbError) {
       console.error('Failed to rollback database:', dbError);
     }
-    throw new Error(`Failed to provision client in Plesk: ${error.message}`);
+
+    res.status(500).json({
+      success: false,
+      message: `Failed to provision client in Plesk: ${error.message}`
+    });
+    return;
   }
 
   // --- Update client with db_name and subdomain URLs ---
