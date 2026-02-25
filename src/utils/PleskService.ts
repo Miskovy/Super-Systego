@@ -11,26 +11,33 @@ const httpsAgent = new https.Agent({ rejectUnauthorized: false });
  * Endpoint: https://<PLESK_HOST>:<PLESK_PORT>/enterprise/control/agent.php
  */
 
-const PLESK_HOST = process.env.PLESK_HOST || 'localhost';
-const PLESK_PORT = process.env.PLESK_PORT || '8443';
-const PLESK_API_KEY = process.env.PLESK_API_KEY || '';
-const PLESK_PARENT_DOMAIN = process.env.PLESK_PARENT_DOMAIN || 'systego.net';
-
-const PLESK_API_URL = `https://${PLESK_HOST}:${PLESK_PORT}/enterprise/control/agent.php`;
+/**
+ * Read Plesk config at call time (after dotenv has loaded).
+ */
+function getPleskConfig() {
+    const host = process.env.PLESK_HOST || 'localhost';
+    const port = process.env.PLESK_PORT || '8443';
+    const apiKey = process.env.PLESK_API_KEY || '';
+    const parentDomain = process.env.PLESK_PARENT_DOMAIN || 'systego.net';
+    const apiUrl = `https://${host}:${port}/enterprise/control/agent.php`;
+    return { host, port, apiKey, parentDomain, apiUrl };
+}
 
 /**
  * Send an XML packet to the Plesk API.
  */
 async function sendPleskRequest(xmlPacket: string): Promise<string> {
-    if (!PLESK_API_KEY) {
+    const { apiKey, apiUrl } = getPleskConfig();
+
+    if (!apiKey) {
         throw new Error('PLESK_API_KEY is not configured. Please set it in your .env file.');
     }
 
     try {
-        const response = await axios.post(PLESK_API_URL, xmlPacket, {
+        const response = await axios.post(apiUrl, xmlPacket, {
             headers: {
                 'Content-Type': 'text/xml',
-                'KEY': PLESK_API_KEY,
+                'KEY': apiKey,
             },
             httpsAgent: httpsAgent,
         } as any);
@@ -75,8 +82,9 @@ function parsePleskResponse(responseXml: string, operation: string): void {
  * @returns The full subdomain URL (e.g., "myschool.systego.net")
  */
 export async function createSubdomain(subdomainName: string): Promise<string> {
+    const { parentDomain } = getPleskConfig();
     const sanitized = sanitizeSubdomainName(subdomainName);
-    const fullSubdomain = `${sanitized}.${PLESK_PARENT_DOMAIN}`;
+    const fullSubdomain = `${sanitized}.${parentDomain}`;
 
     console.log(`Creating subdomain: ${fullSubdomain}`);
 
@@ -84,7 +92,7 @@ export async function createSubdomain(subdomainName: string): Promise<string> {
 <packet>
   <subdomain>
     <add>
-      <parent>${PLESK_PARENT_DOMAIN}</parent>
+      <parent>${parentDomain}</parent>
       <name>${sanitized}</name>
       <property>
         <name>www_root</name>
@@ -106,8 +114,9 @@ export async function createSubdomain(subdomainName: string): Promise<string> {
  * @param subdomainName - The subdomain prefix (e.g., "myschool")
  */
 export async function deleteSubdomain(subdomainName: string): Promise<void> {
+    const { parentDomain } = getPleskConfig();
     const sanitized = sanitizeSubdomainName(subdomainName);
-    const fullSubdomain = `${sanitized}.${PLESK_PARENT_DOMAIN}`;
+    const fullSubdomain = `${sanitized}.${parentDomain}`;
 
     console.log(`Deleting subdomain: ${fullSubdomain}`);
 
