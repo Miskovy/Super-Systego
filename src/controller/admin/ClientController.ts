@@ -72,7 +72,7 @@ export const createClient = asyncHandler(async (req, res) => {
     subdomain: sanitizedSubdomain,
   });
 
-  const dbName = `systego_client_${client._id}`;
+  const dbName = `sc_${client._id}`;
 
   // --- Create the client's MongoDB database ---
   try {
