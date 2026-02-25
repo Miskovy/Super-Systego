@@ -90,11 +90,15 @@ async function copyDirectory(src: string, dest: string) {
     try {
         await fs.access(src);
     } catch {
-        throw new Error(`Master template directory not found at: ${src}`);
+        throw new Error(`Master template directory not found at: ${src}. You must create this folder and place the files inside it before provisioning.`);
     }
 
-    // recursive: true copies all contents inside the source directory
-    await fs.cp(src, dest, { recursive: true, force: true });
+    try {
+        // recursive: true copies all contents inside the source directory
+        await fs.cp(src, dest, { recursive: true, force: true });
+    } catch (copyError: any) {
+        throw new Error(`Failed to copy files from ${src} to ${dest}. Error: ${copyError.message}`);
+    }
 }
 
 /**
