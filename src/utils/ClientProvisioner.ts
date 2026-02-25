@@ -95,7 +95,19 @@ async function copyDirectory(src: string, dest: string) {
 
     try {
         // recursive: true copies all contents inside the source directory
-        await fs.cp(src, dest, { recursive: true, force: true });
+        // filter: ignores heavy folders like node_modules which timeout Nginx proxies
+        await fs.cp(src, dest, {
+            recursive: true,
+            force: true,
+            filter: (source) => {
+                const name = path.basename(source);
+                // Do not copy these heavy/unnecessary folders
+                if (['node_modules', '.git', 'tmp', '.vite', 'dist_cache'].includes(name)) {
+                    return false;
+                }
+                return true;
+            }
+        });
     } catch (copyError: any) {
         throw new Error(`Failed to copy files from ${src} to ${dest}. Error: ${copyError.message}`);
     }
