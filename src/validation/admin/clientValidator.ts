@@ -43,6 +43,11 @@ export const createClientValidator = Joi.object({
       'string.max': 'Subdomain name cannot exceed 63 characters',
       'string.pattern.base': 'Subdomain must contain only lowercase letters, numbers, and hyphens. Cannot start or end with a hyphen.',
       'any.required': 'Subdomain name is required'
+    }),
+
+  logoBase64: Joi.string().optional().allow('')
+    .messages({
+      'string.base': 'Logo must be a valid base64 string'
     })
 });
 
