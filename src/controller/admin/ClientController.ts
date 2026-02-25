@@ -6,11 +6,11 @@ import { SuccessResponse } from '../../utils/response';
 import { PackageModel } from '../../models/shema/auth/Package';
 import { UniqueConstrainError } from '../../Errors';
 import {
-  createSubdomain,
   deleteSubdomain,
   sanitizeSubdomainName,
   validateSubdomainName,
 } from '../../utils/PleskService';
+import { provisionNewClient } from '../../utils/ClientProvisioner';
 
 export const getAllClients = asyncHandler(async (req, res) => {
   const clients = await ClientModel.find()
@@ -77,13 +77,42 @@ export const createClient = asyncHandler(async (req, res) => {
   // --- Create the client's MongoDB database ---
   try {
     const newDbConnection = mongoose.connection.useDb(dbName, { useCache: true });
+
+    // 1. Create system metadata
     await newDbConnection.createCollection('metadata');
     await newDbConnection.collection('metadata').insertOne({
       created_at: new Date(),
       client_id: client._id,
       company_name: client.company_name,
     });
-    console.log(`Database ${dbName} created via useDb`);
+
+    // 2. Seed the initial Super Admin user so the client can log in
+    await newDbConnection.createCollection('users');
+
+    // Generate hashed password for the initial admin
+    let initialPasswordHash = password; // fallback
+    try {
+      // Assuming bcrypt is used in your system
+      const bcrypt = require('bcryptjs');
+      const salt = await bcrypt.genSalt(10);
+      initialPasswordHash = await bcrypt.hash(password, salt);
+    } catch (e) {
+      console.warn("Could not hash password for initial seed, using plain text fallback.", e);
+    }
+
+    await newDbConnection.collection('users').insertOne({
+      username: 'admin', // Default username
+      email: email,      // The email they registered with
+      password_hash: initialPasswordHash,
+      company_name: company_name,
+      role: 'superadmin',
+      status: 'active',
+      permissions: [],
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+
+    console.log(`Database ${dbName} created via useDb and seeded with initial superadmin`);
   } catch (error: any) {
     console.error('Failed to create client database:', error);
     // Rollback: delete the client record
@@ -91,13 +120,24 @@ export const createClient = asyncHandler(async (req, res) => {
     throw new Error(`Failed to create client database: ${error.message || error}. Client creation rolled back.`);
   }
 
-  // --- Create the Plesk subdomain ---
-  let subdomainUrl: string;
+  // --- Provision the Client (Create Subdomains & Copy Files) ---
+  let frontendUrl: string;
+  let backendApiUrl: string;
   try {
-    subdomainUrl = await createSubdomain(sanitizedSubdomain);
-    console.log(`Subdomain ${subdomainUrl} created in Plesk`);
+    const provisionResult = await provisionNewClient(sanitizedSubdomain, {
+      dbName: dbName,
+      // Note: In MongoDB Atlas, you typically use a single database user 
+      // with access to all databases. We pass the default user from ENV here 
+      // if you don't generate separate users per client in Atlas.
+      dbUser: process.env.MONGO_USER || 'systego',
+      dbPass: process.env.MONGO_PASS || 'Systego3030'
+    });
+
+    frontendUrl = provisionResult.frontendUrl;
+    backendApiUrl = provisionResult.backendApiUrl;
+    console.log(`Subdomains provisioned: Frontend=${frontendUrl}, Backend=${backendApiUrl}`);
   } catch (error: any) {
-    console.error('Failed to create subdomain in Plesk:', error.message);
+    console.error('Failed to provision client in Plesk:', error.message);
     // Rollback: delete the client record and database
     await ClientModel.findByIdAndDelete(client._id);
     try {
@@ -105,12 +145,13 @@ export const createClient = asyncHandler(async (req, res) => {
     } catch (dbError) {
       console.error('Failed to rollback database:', dbError);
     }
-    throw new Error(`Failed to create subdomain in Plesk: ${error.message}`);
+    throw new Error(`Failed to provision client in Plesk: ${error.message}`);
   }
 
-  // --- Update client with db_name and subdomain_url ---
+  // --- Update client with db_name and subdomain URLs ---
   client.db_name = dbName;
-  client.subdomain_url = subdomainUrl;
+  client.subdomain_url = frontendUrl; // Save the frontend URL as the main one
+  // You might want to add client.backend_url = backendApiUrl; in your schema future
   await client.save();
 
   return SuccessResponse(res, { message: 'Client created successfully', data: client }, 201);
