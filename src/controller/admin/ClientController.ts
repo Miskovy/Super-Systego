@@ -34,7 +34,7 @@ export const getClientById = asyncHandler(async (req, res) => {
 });
 
 export const createClient = asyncHandler(async (req, res) => {
-  const { company_name, email, password, status, package_id, subdomain } = req.body;
+  const { company_name, email, password, status, package_id, subdomain, logoBase64 } = req.body;
 
   // --- Validate package ---
   const existingPackage = await PackageModel.findById(package_id);
@@ -131,7 +131,7 @@ export const createClient = asyncHandler(async (req, res) => {
       // if you don't generate separate users per client in Atlas.
       dbUser: process.env.MONGO_USER || 'systego',
       dbPass: process.env.MONGO_PASS || 'Systego3030'
-    });
+    }, logoBase64);
 
     frontendUrl = provisionResult.frontendUrl;
     backendApiUrl = provisionResult.backendApiUrl;

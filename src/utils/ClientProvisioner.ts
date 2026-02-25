@@ -28,7 +28,8 @@ const MASTER_BACKEND_DIR = process.env.MASTER_BACKEND_DIR || '/var/www/vhosts/sy
  */
 export async function provisionNewClient(
     clientName: string,
-    dbConfig: { dbName: string; dbUser: string; dbPass: string }
+    dbConfig: { dbName: string; dbUser: string; dbPass: string },
+    logoBase64?: string
 ) {
     console.log(`[Provisioning] Starting for client: ${clientName}`);
 
@@ -39,10 +40,6 @@ export async function provisionNewClient(
     console.log(`[Provisioning] Created subdomains: ${frontendSubdomainUrl} & ${backendSubdomainUrl}`);
 
     try {
-        // 2. Determine paths for the newly created Plesk subdomains
-        // Note: Plesk often puts subdomains in a 'subdomains' folder or directly in vhosts. 
-        // Adjust the path resolution below based on your Plesk setup.
-        // E.g., C:\Inetpub\vhosts\systego.net\api-myschool
         const frontendDestDir = path.join(PLESK_VHOSTS_DIR, clientName);
         const backendDestDir = path.join(PLESK_VHOSTS_DIR, `api-${clientName}`);
 
@@ -50,8 +47,17 @@ export async function provisionNewClient(
         console.log(`[Provisioning] Copying frontend files to ${frontendDestDir}`);
         await copyDirectory(MASTER_FRONTEND_DIR, frontendDestDir);
 
+        // 3.5 If a custom logo was provided, overwrite the Vite logo asset
+        if (logoBase64) {
+            console.log(`[Provisioning] Injecting custom client logo...`);
+            await replaceClientLogo(frontendDestDir, logoBase64);
+        }
+
         // 4. Create the necessary .htaccess for the React frontend
         await generateFrontendHtaccess(frontendDestDir);
+
+        // 4.5. Generate client-specific .env file for the React frontend
+        await generateFrontendEnv(frontendDestDir, backendSubdomainUrl);
 
         // 5. Copy Backend template (Node.js TypeScript dist folder)
         console.log(`[Provisioning] Copying backend files to ${backendDestDir}`);
@@ -216,6 +222,23 @@ RewriteRule ^ index.html [QSA,L]
 }
 
 /**
+ * Helper: Generates the specialized .env file for the client's React frontend
+ */
+async function generateFrontendEnv(destDir: string, backendUrl: string) {
+    const envPath = path.join(destDir, '.env');
+
+    // Vite injects these variables into the React build at runtime/build-time
+    const envContent = `
+# Automatically generated for this specific client instance
+VITE_API_URL=https://${backendUrl}/api
+VITE_APP_BASE_URL=https://${backendUrl}
+    `.trim();
+
+    await fs.writeFile(envPath, envContent, 'utf-8');
+    console.log(`[Provisioning] Wrote frontend .env file to ${envPath}`);
+}
+
+/**
  * Helper: Touch tmp/restart.txt to restart Plesk Passenger Node.js app
  */
 async function triggerNodeRestart(destDir: string) {
@@ -240,4 +263,33 @@ async function triggerNodeRestart(destDir: string) {
 function generateRandomSecret(): string {
     return Math.random().toString(36).substring(2, 15) +
         Math.random().toString(36).substring(2, 15);
+}
+
+/**
+ * Helper: Replaces the generated Vite logo with a base64 uploaded image
+ */
+async function replaceClientLogo(destDir: string, logoBase64: string) {
+    try {
+        // 1. Strip the data URI metadata if present (e.g. data:image/png;base64,)
+        const base64Data = logoBase64.replace(/^data:image\/\w+;base64,/, "");
+        const imageBuffer = Buffer.from(base64Data, 'base64');
+
+        // 2. Find the assets folder in the React build
+        const assetsDir = path.join(destDir, 'assets');
+        const files = await fs.readdir(assetsDir);
+
+        // 3. Find the hashed logo file (e.g., logo-bexWFceL.png)
+        const logoFile = files.find(f => f.startsWith('logo-') && f.endsWith('.png'));
+
+        if (logoFile) {
+            const logoPath = path.join(assetsDir, logoFile);
+            // 4. Overwrite the file with the new buffer!
+            await fs.writeFile(logoPath, imageBuffer);
+            console.log(`[Provisioning] Successfully replaced ${logoFile} with custom client logo`);
+        } else {
+            console.warn(`[Provisioning] Could not find a file matching 'logo-*.png' in ${assetsDir} to replace.`);
+        }
+    } catch (e: any) {
+        console.error(`[Provisioning] Failed to replace custom logo: ${e.message}`);
+    }
 }
