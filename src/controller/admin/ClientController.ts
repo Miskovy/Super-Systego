@@ -84,11 +84,11 @@ export const createClient = asyncHandler(async (req, res) => {
       company_name: client.company_name,
     });
     console.log(`Database ${dbName} created via useDb`);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to create client database:', error);
     // Rollback: delete the client record
     await ClientModel.findByIdAndDelete(client._id);
-    throw new Error('Failed to create client database. Client creation rolled back.');
+    throw new Error(`Failed to create client database: ${error.message || error}. Client creation rolled back.`);
   }
 
   // --- Create the Plesk subdomain ---
