@@ -390,19 +390,19 @@ export async function deployBackendForClient(clientName: string) {
 
         // 1. Enable Node.js Extension
         console.log(`[Provisioning] Enabling Node.js Extension for ${apiSubdomain}...`);
-        await execAsync(`plesk ext nodejs --enable -domain ${apiSubdomain}`);
+        await execAsync(`sudo plesk ext nodejs --enable -domain ${apiSubdomain}`);
 
         // 2. Configure Startup File & Mode
         console.log(`[Provisioning] Setting Startup File to dist/src/server.js...`);
-        await execAsync(`plesk ext nodejs --update -domain ${apiSubdomain} -startup-file dist/src/server.js -app-mode production`);
+        await execAsync(`sudo plesk ext nodejs --update -domain ${apiSubdomain} -startup-file dist/src/server.js -app-mode production`);
 
         // 3. Disable Nginx Proxy Mode (so it routes natively to Node)
         console.log(`[Provisioning] Disabling Nginx Proxy Mode...`);
-        await execAsync(`plesk bin domain -u ${apiSubdomain} -nginx-proxy false`);
+        await execAsync(`sudo plesk bin domain -u ${apiSubdomain} -nginx-proxy false`);
 
         // 4. Install NPM Dependencies
         console.log(`[Provisioning] Installing NPM Production Dependencies in ${destDir}...`);
-        const { stdout: npmOut } = await execAsync(`npm install --production`, {
+        const { stdout: npmOut } = await execAsync(`sudo npm install --production`, {
             cwd: destDir,
             maxBuffer: 1024 * 1024 * 5
         });
@@ -410,7 +410,7 @@ export async function deployBackendForClient(clientName: string) {
 
         // 5. Restart the Node.js App
         console.log(`[Provisioning] Restarting Node.js App for ${apiSubdomain}...`);
-        await execAsync(`plesk ext nodejs --restart -domain ${apiSubdomain}`);
+        await execAsync(`sudo plesk ext nodejs --restart -domain ${apiSubdomain}`);
 
         console.log(`[Provisioning] Backend Deployment completed flawlessly for ${apiSubdomain}!`);
         return true;
