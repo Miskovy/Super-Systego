@@ -230,9 +230,8 @@ async function generateFrontendEnv(destDir: string, backendUrl: string) {
     // Vite injects these variables into the React build at runtime/build-time
     const envContent = `
 # Automatically generated for this specific client instance
-VITE_API_URL=https://${backendUrl}/api
-VITE_APP_BASE_URL=https://${backendUrl}
-    `.trim();
+VITE_API_BASE_URL=https://${backendUrl}
+`.trim();
 
     await fs.writeFile(envPath, envContent, 'utf-8');
     console.log(`[Provisioning] Wrote frontend .env file to ${envPath}`);
