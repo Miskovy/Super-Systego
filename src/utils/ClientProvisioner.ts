@@ -382,43 +382,32 @@ export async function deployBackendForClient(clientName: string) {
     console.log(`[Provisioning] Starting automated Node.js Backend Deployment for: ${apiSubdomain}`);
 
     try {
-        // DIAGNOSTIC: Query Plesk API spec to find nodejs-related endpoints
-        const axios = require('axios');
-        const https = require('https');
-        const agent = new https.Agent({ rejectUnauthorized: false });
-        const pleskHost = process.env.PLESK_HOST || 'localhost';
-        const pleskPort = process.env.PLESK_PORT || '8443';
-        const pleskApiKey = process.env.PLESK_API_KEY;
+        // 1. Enable Node.js Extension via REST API (using --call, NOT --exec)
+        console.log(`[Provisioning] Enabling Node.js Extension for ${apiSubdomain}...`);
+        await executePleskCli('extension', ['--call', 'nodejs', '--enable', '-domain', apiSubdomain]);
 
-        // Step 1: Get extension utility help to discover its subcommands
-        let extHelp = '';
-        try {
-            const helpRes = await axios.post(`https://${pleskHost}:${pleskPort}/api/v2/cli/extension/call`,
-                { params: ['--help'] },
-                {
-                    headers: { 'X-API-Key': pleskApiKey, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    httpsAgent: agent
-                } as any);
-            extHelp = helpRes.data?.stdout || JSON.stringify(helpRes.data);
-        } catch (e1: any) {
-            extHelp = `Error: ${e1.response?.status} - ${JSON.stringify(e1.response?.data || e1.message).substring(0, 500)}`;
-        }
+        // 2. Configure Startup File & Mode via REST API
+        console.log(`[Provisioning] Setting Startup File to dist/src/server.js...`);
+        await executePleskCli('extension', ['--call', 'nodejs', '--update', '-domain', apiSubdomain, '-startup-file', 'dist/src/server.js', '-app-mode', 'production']);
 
-        // Step 2: Try --call instead of --exec to invoke the extension's CLI handler
-        let callResult = '';
-        try {
-            const callRes = await axios.post(`https://${pleskHost}:${pleskPort}/api/v2/cli/extension/call`,
-                { params: ['--call', 'nodejs', '--enable', '-domain', apiSubdomain] },
-                {
-                    headers: { 'X-API-Key': pleskApiKey, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    httpsAgent: agent
-                } as any);
-            callResult = `SUCCESS: ${JSON.stringify(callRes.data).substring(0, 500)}`;
-        } catch (e2: any) {
-            callResult = `Error: ${e2.response?.status} - ${JSON.stringify(e2.response?.data || e2.message).substring(0, 500)}`;
-        }
+        // 3. Disable Nginx Proxy Mode via REST API (core domain utility)
+        console.log(`[Provisioning] Disabling Nginx Proxy Mode...`);
+        await executePleskCli('domain', ['-u', apiSubdomain, '-nginx-proxy', 'false']);
 
-        throw new Error(`EXT HELP: ${extHelp.substring(0, 1200)} ||| CALL RESULT: ${callResult}`);
+        // 4. Install NPM Dependencies
+        console.log(`[Provisioning] Installing NPM Production Dependencies in ${destDir}...`);
+        const { stdout: npmOut } = await execAsync(`npm install --production`, {
+            cwd: destDir,
+            maxBuffer: 1024 * 1024 * 5
+        });
+        console.log(npmOut);
+
+        // 5. Restart the Node.js App via REST API
+        console.log(`[Provisioning] Restarting Node.js App for ${apiSubdomain}...`);
+        await executePleskCli('extension', ['--call', 'nodejs', '--restart', '-domain', apiSubdomain]);
+
+        console.log(`[Provisioning] Backend Deployment completed flawlessly for ${apiSubdomain}!`);
+        return true;
 
     } catch (err: any) {
         throw new Error(`Failed to completely deploy backend on Plesk: ${err.message}`);
