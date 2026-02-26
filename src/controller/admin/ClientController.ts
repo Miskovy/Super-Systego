@@ -10,7 +10,11 @@ import {
   sanitizeSubdomainName,
   validateSubdomainName,
 } from '../../utils/PleskService';
-import { provisionNewClient, rebuildFrontendForClient } from '../../utils/ClientProvisioner';
+import {
+  provisionNewClient,
+  rebuildFrontendForClient,
+  deployBackendForClient
+} from '../../utils/ClientProvisioner';
 
 export const getAllClients = asyncHandler(async (req, res) => {
   const clients = await ClientModel.find()
@@ -247,12 +251,32 @@ export const rebuildClientFrontend = asyncHandler(async (req, res) => {
     await rebuildFrontendForClient(client.subdomain);
     return SuccessResponse(res, { message: 'Frontend rebuilt successfully' }, 200);
   } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      message: `Failed to rebuild frontend: ${error.message}`
-    });
+    res.status(500).json({ success: false, message: 'Failed to rebuild frontend', error: error.message });
   }
 });
+
+export const deployClientBackend = asyncHandler(async (req, res) => {
+  const id = req.params.id;
+  const client = await ClientModel.findById(id);
+
+  if (!client) {
+    throw new NotFound('Client not found');
+  }
+
+  if (!client.subdomain) {
+    res.status(400).json({ success: false, message: 'Client has no subdomain' });
+    return;
+  }
+
+  try {
+    // This process takes 1-2 minutes to run npm install and configure Plesk
+    await deployBackendForClient(client.subdomain);
+    return SuccessResponse(res, { message: 'Backend Node.js application deployed and restarted successfully' }, 200);
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to deploy backend on Plesk', error: error.message });
+  }
+});
+
 
 export const select = asyncHandler(async (req, res) => {
   const packages = await PackageModel.find()

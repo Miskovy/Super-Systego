@@ -365,3 +365,57 @@ export async function rebuildFrontend(destDir: string, apiSubdomain: string) {
         throw new Error(`Failed to inject frontend URLs: ${err.message}`);
     }
 }
+
+/**
+ * Automates the Plesk Node.js Backend deployment process exactly as you would do manually.
+ * 
+ * 1. Enables Node.js extension for the backend subdomain
+ * 2. Sets startup file and app mode
+ * 3. Disables Nginx Proxy Mode
+ * 4. Installs Production NPM dependencies
+ * 5. Restarts the application
+ */
+export async function deployBackendForClient(clientName: string) {
+    const apiSubdomain = `api-${clientName}.systego.net`;
+    const destDir = path.join(PLESK_VHOSTS_DIR, `api-${clientName}`);
+
+    console.log(`[Provisioning] Starting automated Node.js Backend Deployment for: ${apiSubdomain}`);
+
+    try {
+        // Since we develop on Windows but run on Linux, we only execute Plesk CLI if on Linux
+        if (process.platform === 'win32') {
+            console.log(`[Provisioning: Local Dev] Skipping Plesk CLI automation on Windows.`);
+            return true;
+        }
+
+        // 1. Enable Node.js Extension
+        console.log(`[Provisioning] Enabling Node.js Extension for ${apiSubdomain}...`);
+        await execAsync(`plesk ext nodejs --enable -domain ${apiSubdomain}`);
+
+        // 2. Configure Startup File & Mode
+        console.log(`[Provisioning] Setting Startup File to dist/src/server.js...`);
+        await execAsync(`plesk ext nodejs --update -domain ${apiSubdomain} -startup-file dist/src/server.js -app-mode production`);
+
+        // 3. Disable Nginx Proxy Mode (so it routes natively to Node)
+        console.log(`[Provisioning] Disabling Nginx Proxy Mode...`);
+        await execAsync(`plesk bin domain -u ${apiSubdomain} -nginx-proxy false`);
+
+        // 4. Install NPM Dependencies
+        console.log(`[Provisioning] Installing NPM Production Dependencies in ${destDir}...`);
+        const { stdout: npmOut } = await execAsync(`npm install --production`, {
+            cwd: destDir,
+            maxBuffer: 1024 * 1024 * 5
+        });
+        console.log(npmOut);
+
+        // 5. Restart the Node.js App
+        console.log(`[Provisioning] Restarting Node.js App for ${apiSubdomain}...`);
+        await execAsync(`plesk ext nodejs --restart -domain ${apiSubdomain}`);
+
+        console.log(`[Provisioning] Backend Deployment completed flawlessly for ${apiSubdomain}!`);
+        return true;
+
+    } catch (err: any) {
+        throw new Error(`Failed to completely deploy backend on Plesk: ${err.message}`);
+    }
+}
