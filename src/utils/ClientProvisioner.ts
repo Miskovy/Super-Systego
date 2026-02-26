@@ -395,9 +395,9 @@ require('./dist/src/server.js');
 `;
         await fs.writeFile(path.join(destDir, 'app.js'), appJsContent, 'utf-8');
 
-        // 3. Disable Nginx Proxy Mode via REST API (core domain utility)
+        // 3. Disable Nginx Proxy Mode via REST API (must use --update-web-server-settings)
         console.log(`[Provisioning] Disabling Nginx Proxy Mode...`);
-        await executePleskCli('domain', ['-u', apiSubdomain, '-nginx-proxy', 'false']);
+        await executePleskCli('domain', ['--update-web-server-settings', apiSubdomain, '-nginx-proxy-mode', 'false']);
 
         // 4. Install NPM Dependencies
         console.log(`[Provisioning] Installing NPM Production Dependencies in ${destDir}...`);
