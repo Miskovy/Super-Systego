@@ -382,14 +382,14 @@ export async function deployBackendForClient(clientName: string) {
     console.log(`[Provisioning] Starting automated Node.js Backend Deployment for: ${apiSubdomain}`);
 
     try {
-        const fs = require('fs');
-        let scripts = [];
+        let helpText = '';
         try {
-            scripts = fs.readdirSync('/opt/psa/admin/plib/modules/nodejs/scripts/');
-            throw new Error(`DEBUG PLESK SCRIPTS RETURNED: ${scripts.join(', ')}`);
+            const result = await executePleskCli('domain', ['--help']);
+            helpText = result.stdout || result.response || JSON.stringify(result);
+            throw new Error(`DEBUG PLESK DOMAIN HELP: ${helpText}`);
         } catch (e: any) {
-            if (!e.message.includes('DEBUG PLESK SCRIPTS')) {
-                throw new Error(`DEBUG PLESK SCRIPTS FAILED TO READ: ${e.message}`);
+            if (!e.message.includes('DEBUG PLESK DOMAIN HELP')) {
+                throw new Error(`DEBUG PLESK HELP FAILED: ${e.message}`);
             }
             throw e;
         }
