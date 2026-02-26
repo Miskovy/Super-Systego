@@ -181,3 +181,31 @@ export function validateSubdomainName(name: string): string | null {
 
     return null;
 }
+
+/**
+ * Enable Node.js support for a domain using the Plesk CLI via XML API.
+ * 
+ * @param subdomainName - The subdomain prefix (e.g., "api-myschool")
+ */
+export async function enableNodeJsOnDomain(subdomainName: string): Promise<void> {
+    const { parentDomain } = getPleskConfig();
+    const sanitized = sanitizeSubdomainName(subdomainName);
+    const fullSubdomain = `${sanitized}.${parentDomain}`;
+
+    console.log(`Enabling Node.js for subdomain: ${fullSubdomain}`);
+
+    const xmlPacket = `<?xml version="1.0" encoding="UTF-8"?>
+<packet>
+  <server>
+    <do-command>
+      <command>nodejs</command>
+      <arg>--enable</arg>
+      <arg>-domain</arg>
+      <arg>${fullSubdomain}</arg>
+    </do-command>
+  </server>
+</packet>`;
+
+    const response = await sendPleskRequest(xmlPacket);
+    parsePleskResponse(response, 'enable node.js');
+}

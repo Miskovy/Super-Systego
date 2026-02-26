@@ -1,6 +1,10 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { createSubdomain, deleteSubdomain } from './PleskService';
+import { exec } from 'child_process';
+import util from 'util';
+import { createSubdomain, deleteSubdomain, enableNodeJsOnDomain } from './PleskService';
+
+const execPromise = util.promisify(exec);
 
 // ============================================================================
 // Configuration
@@ -65,6 +69,23 @@ export async function provisionNewClient(
 
         // 6. Generate client-specific .env file for the Node.js backend
         await generateBackendEnv(backendDestDir, clientName, frontendSubdomainUrl, dbConfig);
+
+        // 6.5 Enable Node.js on the Plesk domain
+        console.log(`[Provisioning] Enabling Node.js extension for api-${clientName}`);
+        await enableNodeJsOnDomain(`api-${clientName}`);
+
+        // 6.6 Run npm install in backend
+        console.log(`[Provisioning] Running npm install in ${backendDestDir}`);
+        try {
+            const { stdout, stderr } = await execPromise('npm install --omit=dev', { cwd: backendDestDir });
+            console.log(`[Provisioning] npm install stdout: ${stdout}`);
+            if (stderr) console.error(`[Provisioning] npm install stderr: ${stderr}`);
+        } catch (npmErr: any) {
+            console.error(`[Provisioning] npm install failed: ${npmErr.message}`);
+            throw new Error(`Failed to install Node.js dependencies: ${npmErr.message}`);
+        }
+
+
 
         // 7. Trigger a restart for the Node.js backend
         // Plesk Passenger restarts the app when a tmp/restart.txt file is touched
