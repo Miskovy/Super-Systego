@@ -382,44 +382,35 @@ export async function deployBackendForClient(clientName: string) {
     console.log(`[Provisioning] Starting automated Node.js Backend Deployment for: ${apiSubdomain}`);
 
     try {
-        let helpText = '';
+        // DIAGNOSTIC: Query Plesk API spec to find nodejs-related endpoints
+        const axios = require('axios');
+        const https = require('https');
+        const agent = new https.Agent({ rejectUnauthorized: false });
+        const pleskHost = process.env.PLESK_HOST || 'localhost';
+        const pleskPort = process.env.PLESK_PORT || '8443';
+        const pleskApiKey = process.env.PLESK_API_KEY;
+
+        // First, try to get the list of available CLI commands
+        const cliRes = await axios.get(`https://${pleskHost}:${pleskPort}/api/v2/cli/commands`, {
+            headers: { 'X-API-Key': pleskApiKey, 'Accept': 'application/json' },
+            httpsAgent: agent
+        } as any);
+
+        const commands = JSON.stringify(cliRes.data);
+
+        // Also check if there's a dedicated nodejs endpoint
+        let nodejsEndpoint = 'NOT FOUND';
         try {
-            const result = await executePleskCli('domain', ['--help']);
-            helpText = result.stdout || result.response || JSON.stringify(result);
-            throw new Error(`DEBUG PLESK DOMAIN HELP: ${helpText}`);
-        } catch (e: any) {
-            if (!e.message.includes('DEBUG PLESK DOMAIN HELP')) {
-                throw new Error(`DEBUG PLESK HELP FAILED: ${e.message}`);
-            }
-            throw e;
+            const njRes = await axios.get(`https://${pleskHost}:${pleskPort}/api/v2/cli/nodejs/`, {
+                headers: { 'X-API-Key': pleskApiKey, 'Accept': 'application/json' },
+                httpsAgent: agent
+            } as any);
+            nodejsEndpoint = JSON.stringify(njRes.data);
+        } catch (e2: any) {
+            nodejsEndpoint = `Error: ${e2.response?.status} - ${JSON.stringify(e2.response?.data || e2.message)}`;
         }
 
-        // 1. Enable Node.js Extension natively via Bash (Requires Sudoers NOPASSWD)
-        console.log(`[Provisioning] Enabling Node.js Extension for ${apiSubdomain}...`);
-        await execAsync(`sudo plesk ext nodejs --enable -domain ${apiSubdomain}`);
-
-        // 2. Configure Startup File & Mode natively via Bash
-        console.log(`[Provisioning] Setting Startup File to dist/src/server.js...`);
-        await execAsync(`sudo plesk ext nodejs --update -domain ${apiSubdomain} -startup-file dist/src/server.js -app-mode production`);
-
-        // 3. Disable Nginx Proxy Mode natively via Bash
-        console.log(`[Provisioning] Disabling Nginx Proxy Mode...`);
-        await execAsync(`sudo plesk bin domain -u ${apiSubdomain} -nginx-proxy false`);
-
-        // 4. Install NPM Dependencies (Without sudo, as the internal user owns the destination)
-        console.log(`[Provisioning] Installing NPM Production Dependencies in ${destDir}...`);
-        const { stdout: npmOut } = await execAsync(`npm install --production`, {
-            cwd: destDir,
-            maxBuffer: 1024 * 1024 * 5
-        });
-        console.log(npmOut);
-
-        // 5. Restart the Node.js App natively via Bash
-        console.log(`[Provisioning] Restarting Node.js App for ${apiSubdomain}...`);
-        await execAsync(`sudo plesk ext nodejs --restart -domain ${apiSubdomain}`);
-
-        console.log(`[Provisioning] Backend Deployment completed flawlessly for ${apiSubdomain}!`);
-        return true;
+        throw new Error(`DEBUG CLI COMMANDS: ${commands.substring(0, 1500)} ||| NODEJS ENDPOINT: ${nodejsEndpoint}`);
 
     } catch (err: any) {
         throw new Error(`Failed to completely deploy backend on Plesk: ${err.message}`);
