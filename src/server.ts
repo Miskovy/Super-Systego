@@ -11,7 +11,7 @@ import helmet from "helmet";
 import { connectDB } from "./models/connection";
 import { seedAdminFromEnv } from "./utils/seedAdmin";
 
-
+// Load environment variables
 dotenv.config();
 
 const app = express();
