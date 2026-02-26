@@ -331,7 +331,12 @@ export async function rebuildFrontend(destDir: string) {
         // Use a larger maxBuffer in case the build produces a lot of output
         // We use --include=dev because Vite and @vitejs/plugin-react are usually 
         // in devDependencies, which production servers often skip by default!
-        const { stdout, stderr } = await execAsync('npm install --include=dev && npm run build', {
+        // We also delete the .vite cache folder to ensure Vite doesn't ignore our new .env variables!
+        const rmCacheCmd = process.platform === 'win32'
+            ? 'rmdir /s /q node_modules\\.vite || exit 0'
+            : 'rm -rf node_modules/.vite';
+
+        const { stdout, stderr } = await execAsync(`${rmCacheCmd} && npm install --include=dev && npm run build`, {
             cwd: destDir,
             maxBuffer: 1024 * 1024 * 10,
             // 2. Explicitly inject the extracted VITE_ variables into the build process
