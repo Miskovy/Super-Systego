@@ -386,9 +386,10 @@ export async function deployBackendForClient(clientName: string) {
         console.log(`[Provisioning] Enabling Node.js Extension for ${apiSubdomain}...`);
         await executePleskCli('extension', ['--call', 'nodejs', '--enable', '-domain', apiSubdomain]);
 
-        // 2. Configure Startup File & Mode via REST API
-        console.log(`[Provisioning] Setting Startup File to dist/src/server.js...`);
-        await executePleskCli('extension', ['--call', 'nodejs', '--update', '-domain', apiSubdomain, '-startup-file', 'dist/src/server.js', '-app-mode', 'production']);
+        // 2. DIAGNOSTIC: Get Node.js extension help to find correct command names
+        console.log(`[Provisioning] Querying Node.js extension help...`);
+        const helpResult = await executePleskCli('extension', ['--call', 'nodejs', '--help']);
+        throw new Error(`DEBUG NODEJS HELP: ${helpResult.stdout || JSON.stringify(helpResult)}`);
 
         // 3. Disable Nginx Proxy Mode via REST API (core domain utility)
         console.log(`[Provisioning] Disabling Nginx Proxy Mode...`);
