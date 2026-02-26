@@ -236,7 +236,16 @@ SHIFT_REPORT_PASSWORD=123456789
  */
 async function generatePassengerEntryPoint(destDir: string) {
     const entryPath = path.join(destDir, 'app.js');
-    const content = `require('./dist/src/server.js');\n`;
+    const content = `
+const fs = require('fs');
+try {
+    require('./dist/src/server.js');
+} catch (err) {
+    fs.writeFileSync('./startup_error.log', err.stack || err.toString());
+    console.error("Failed to start Passenger app:", err);
+    process.exit(1);
+}
+`;
     await fs.writeFile(entryPath, content, 'utf-8');
     console.log(`[Provisioning] Wrote Passenger entry point to ${entryPath}`);
 }
