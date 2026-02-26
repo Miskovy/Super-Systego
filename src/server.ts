@@ -15,7 +15,7 @@ import { seedAdminFromEnv } from "./utils/seedAdmin";
 dotenv.config();
 
 const app = express();
-connectDB().then(seedAdminFromEnv).catch(() => {});
+connectDB().then(seedAdminFromEnv).catch(() => { });
 
 app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(cors({ origin: "*" }));
@@ -39,6 +39,7 @@ const io = new Server(server, {
 
 // ربط Socket.IO
 
-server.listen(3000, () => {
-  console.log("Server is running on http://localhost:3000");
+const port = process.env.PORT || 3000;
+server.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
 });
