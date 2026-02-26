@@ -15,39 +15,39 @@ const httpsAgent = new https.Agent({ rejectUnauthorized: false });
  * Read Plesk config at call time (after dotenv has loaded).
  */
 function getPleskConfig() {
-    const host = process.env.PLESK_HOST || 'localhost';
-    const port = process.env.PLESK_PORT || '8443';
-    const apiKey = process.env.PLESK_API_KEY || '';
-    const parentDomain = process.env.PLESK_PARENT_DOMAIN || 'systego.net';
-    const apiUrl = `https://${host}:${port}/enterprise/control/agent.php`;
-    return { host, port, apiKey, parentDomain, apiUrl };
+  const host = process.env.PLESK_HOST || 'localhost';
+  const port = process.env.PLESK_PORT || '8443';
+  const apiKey = process.env.PLESK_API_KEY || '';
+  const parentDomain = process.env.PLESK_PARENT_DOMAIN || 'systego.net';
+  const apiUrl = `https://${host}:${port}/enterprise/control/agent.php`;
+  return { host, port, apiKey, parentDomain, apiUrl };
 }
 
 /**
  * Send an XML packet to the Plesk API.
  */
 async function sendPleskRequest(xmlPacket: string): Promise<string> {
-    const { apiKey, apiUrl } = getPleskConfig();
+  const { apiKey, apiUrl } = getPleskConfig();
 
-    if (!apiKey) {
-        throw new Error('PLESK_API_KEY is not configured. Please set it in your .env file.');
-    }
+  if (!apiKey) {
+    throw new Error('PLESK_API_KEY is not configured. Please set it in your .env file.');
+  }
 
-    try {
-        const response = await axios.post(apiUrl, xmlPacket, {
-            headers: {
-                'Content-Type': 'text/xml',
-                'KEY': apiKey,
-            },
-            httpsAgent: httpsAgent,
-        } as any);
+  try {
+    const response = await axios.post(apiUrl, xmlPacket, {
+      headers: {
+        'Content-Type': 'text/xml',
+        'KEY': apiKey,
+      },
+      httpsAgent: httpsAgent,
+    } as any);
 
-        return response.data as string;
-    } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        console.error('Plesk API request failed:', message);
-        throw new Error(`Plesk API request failed: ${message}`);
-    }
+    return response.data as string;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Plesk API request failed:', message);
+    throw new Error(`Plesk API request failed: ${message}`);
+  }
 }
 
 /**
@@ -55,24 +55,24 @@ async function sendPleskRequest(xmlPacket: string): Promise<string> {
  * Returns the result or throws an error if the operation failed.
  */
 function parsePleskResponse(responseXml: string, operation: string): void {
-    // Check for error status in the response
-    const statusMatch = responseXml.match(/<status>(.*?)<\/status>/);
-    const errorCodeMatch = responseXml.match(/<errcode>(.*?)<\/errcode>/);
-    const errorTextMatch = responseXml.match(/<errtext>(.*?)<\/errtext>/);
+  // Check for error status in the response
+  const statusMatch = responseXml.match(/<status>(.*?)<\/status>/);
+  const errorCodeMatch = responseXml.match(/<errcode>(.*?)<\/errcode>/);
+  const errorTextMatch = responseXml.match(/<errtext>(.*?)<\/errtext>/);
 
-    if (statusMatch && statusMatch[1] === 'error') {
-        const errCode = errorCodeMatch ? errorCodeMatch[1] : 'unknown';
-        const errText = errorTextMatch ? errorTextMatch[1] : 'Unknown Plesk error';
-        throw new Error(`Plesk ${operation} failed [${errCode}]: ${errText}`);
-    }
+  if (statusMatch && statusMatch[1] === 'error') {
+    const errCode = errorCodeMatch ? errorCodeMatch[1] : 'unknown';
+    const errText = errorTextMatch ? errorTextMatch[1] : 'Unknown Plesk error';
+    throw new Error(`Plesk ${operation} failed [${errCode}]: ${errText}`);
+  }
 
-    if (statusMatch && statusMatch[1] === 'ok') {
-        console.log(`Plesk ${operation} completed successfully.`);
-        return;
-    }
+  if (statusMatch && statusMatch[1] === 'ok') {
+    console.log(`Plesk ${operation} completed successfully.`);
+    return;
+  }
 
-    // If we can't parse the status, log the raw response for debugging
-    console.warn(`Plesk ${operation} response could not be fully parsed:`, responseXml);
+  // If we can't parse the status, log the raw response for debugging
+  console.warn(`Plesk ${operation} response could not be fully parsed:`, responseXml);
 }
 
 /**
@@ -82,13 +82,13 @@ function parsePleskResponse(responseXml: string, operation: string): void {
  * @returns The full subdomain URL (e.g., "myschool.systego.net")
  */
 export async function createSubdomain(subdomainName: string): Promise<string> {
-    const { parentDomain } = getPleskConfig();
-    const sanitized = sanitizeSubdomainName(subdomainName);
-    const fullSubdomain = `${sanitized}.${parentDomain}`;
+  const { parentDomain } = getPleskConfig();
+  const sanitized = sanitizeSubdomainName(subdomainName);
+  const fullSubdomain = `${sanitized}.${parentDomain}`;
 
-    console.log(`Creating subdomain: ${fullSubdomain}`);
+  console.log(`Creating subdomain: ${fullSubdomain}`);
 
-    const xmlPacket = `<?xml version="1.0" encoding="UTF-8"?>
+  const xmlPacket = `<?xml version="1.0" encoding="UTF-8"?>
 <packet>
   <subdomain>
     <add>
@@ -102,10 +102,10 @@ export async function createSubdomain(subdomainName: string): Promise<string> {
   </subdomain>
 </packet>`;
 
-    const response = await sendPleskRequest(xmlPacket);
-    parsePleskResponse(response, 'subdomain creation');
+  const response = await sendPleskRequest(xmlPacket);
+  parsePleskResponse(response, 'subdomain creation');
 
-    return fullSubdomain;
+  return fullSubdomain;
 }
 
 /**
@@ -114,13 +114,13 @@ export async function createSubdomain(subdomainName: string): Promise<string> {
  * @param subdomainName - The subdomain prefix (e.g., "myschool")
  */
 export async function deleteSubdomain(subdomainName: string): Promise<void> {
-    const { parentDomain } = getPleskConfig();
-    const sanitized = sanitizeSubdomainName(subdomainName);
-    const fullSubdomain = `${sanitized}.${parentDomain}`;
+  const { parentDomain } = getPleskConfig();
+  const sanitized = sanitizeSubdomainName(subdomainName);
+  const fullSubdomain = `${sanitized}.${parentDomain}`;
 
-    console.log(`Deleting subdomain: ${fullSubdomain}`);
+  console.log(`Deleting subdomain: ${fullSubdomain}`);
 
-    const xmlPacket = `<?xml version="1.0" encoding="UTF-8"?>
+  const xmlPacket = `<?xml version="1.0" encoding="UTF-8"?>
 <packet>
   <subdomain>
     <del>
@@ -131,8 +131,8 @@ export async function deleteSubdomain(subdomainName: string): Promise<void> {
   </subdomain>
 </packet>`;
 
-    const response = await sendPleskRequest(xmlPacket);
-    parsePleskResponse(response, 'subdomain deletion');
+  const response = await sendPleskRequest(xmlPacket);
+  parsePleskResponse(response, 'subdomain deletion');
 }
 
 /**
@@ -144,14 +144,14 @@ export async function deleteSubdomain(subdomainName: string): Promise<void> {
  * - Limits to 63 characters
  */
 export function sanitizeSubdomainName(name: string): string {
-    return name
-        .toLowerCase()
-        .trim()
-        .replace(/[\s_]+/g, '-')       // Replace spaces/underscores with hyphens
-        .replace(/[^a-z0-9-]/g, '')    // Remove non-alphanumeric/hyphen chars
-        .replace(/^-+|-+$/g, '')       // Remove leading/trailing hyphens
-        .replace(/-{2,}/g, '-')        // Collapse multiple hyphens
-        .substring(0, 63);             // DNS label max length
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[\s_]+/g, '-')       // Replace spaces/underscores with hyphens
+    .replace(/[^a-z0-9-]/g, '')    // Remove non-alphanumeric/hyphen chars
+    .replace(/^-+|-+$/g, '')       // Remove leading/trailing hyphens
+    .replace(/-{2,}/g, '-')        // Collapse multiple hyphens
+    .substring(0, 63);             // DNS label max length
 }
 
 /**
@@ -159,27 +159,27 @@ export function sanitizeSubdomainName(name: string): string {
  * Returns null if valid, or an error message string if invalid.
  */
 export function validateSubdomainName(name: string): string | null {
-    if (!name || name.trim().length === 0) {
-        return 'Subdomain name is required';
-    }
+  if (!name || name.trim().length === 0) {
+    return 'Subdomain name is required';
+  }
 
-    const sanitized = sanitizeSubdomainName(name);
+  const sanitized = sanitizeSubdomainName(name);
 
-    if (sanitized.length < 3) {
-        return 'Subdomain name must be at least 3 characters long';
-    }
+  if (sanitized.length < 3) {
+    return 'Subdomain name must be at least 3 characters long';
+  }
 
-    if (sanitized.length > 63) {
-        return 'Subdomain name cannot exceed 63 characters';
-    }
+  if (sanitized.length > 63) {
+    return 'Subdomain name cannot exceed 63 characters';
+  }
 
-    // Check for reserved names that might conflict with existing subdomains
-    const reserved = ['www', 'mail', 'ftp', 'admin', 'super', 'superback', 'api', 'ns1', 'ns2', 'cpanel', 'webmail'];
-    if (reserved.includes(sanitized)) {
-        return `Subdomain name "${sanitized}" is reserved and cannot be used`;
-    }
+  // Check for reserved names that might conflict with existing subdomains
+  const reserved = ['www', 'mail', 'ftp', 'admin', 'super', 'superback', 'api', 'ns1', 'ns2', 'cpanel', 'webmail'];
+  if (reserved.includes(sanitized)) {
+    return `Subdomain name "${sanitized}" is reserved and cannot be used`;
+  }
 
-    return null;
+  return null;
 }
 
 /**
@@ -188,24 +188,21 @@ export function validateSubdomainName(name: string): string | null {
  * @param subdomainName - The subdomain prefix (e.g., "api-myschool")
  */
 export async function enableNodeJsOnDomain(subdomainName: string): Promise<void> {
-    const { parentDomain } = getPleskConfig();
-    const sanitized = sanitizeSubdomainName(subdomainName);
-    const fullSubdomain = `${sanitized}.${parentDomain}`;
+  const { parentDomain } = getPleskConfig();
+  const sanitized = sanitizeSubdomainName(subdomainName);
+  const fullSubdomain = `${sanitized}.${parentDomain}`;
 
-    console.log(`Enabling Node.js for subdomain: ${fullSubdomain}`);
+  console.log(`Enabling Node.js for subdomain: ${fullSubdomain}`);
 
-    const xmlPacket = `<?xml version="1.0" encoding="UTF-8"?>
+  const xmlPacket = `<?xml version="1.0" encoding="UTF-8"?>
 <packet>
-  <server>
-    <do-command>
-      <command>nodejs</command>
-      <arg>--enable</arg>
-      <arg>-domain</arg>
-      <arg>${fullSubdomain}</arg>
-    </do-command>
-  </server>
+  <nodejs>
+    <enable>
+      <domain>${fullSubdomain}</domain>
+    </enable>
+  </nodejs>
 </packet>`;
 
-    const response = await sendPleskRequest(xmlPacket);
-    parsePleskResponse(response, 'enable node.js');
+  const response = await sendPleskRequest(xmlPacket);
+  parsePleskResponse(response, 'enable node.js');
 }
