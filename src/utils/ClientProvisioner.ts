@@ -70,6 +70,9 @@ export async function provisionNewClient(
         // 6. Generate client-specific .env file for the Node.js backend
         await generateBackendEnv(backendDestDir, clientName, frontendSubdomainUrl, dbConfig);
 
+        // 6.2 Create Passenger entry point
+        await generatePassengerEntryPoint(backendDestDir);
+
         // 6.5 Enable Node.js on the Plesk domain
         console.log(`[Provisioning] Enabling Node.js extension for api-${clientName}`);
         await enableNodeJsOnDomain(`api-${clientName}`);
@@ -224,6 +227,17 @@ SHIFT_REPORT_PASSWORD=123456789
 
     await fs.writeFile(envPath, envContent, 'utf-8');
     console.log(`[Provisioning] Wrote backend .env file to ${envPath}`);
+}
+
+/**
+ * Helper: Generates an entry point file for Phusion Passenger in Plesk.
+ * Passenger automatically looks for app.js or server.js in the application root.
+ */
+async function generatePassengerEntryPoint(destDir: string) {
+    const entryPath = path.join(destDir, 'app.js');
+    const content = `require('./dist/src/server.js');\n`;
+    await fs.writeFile(entryPath, content, 'utf-8');
+    console.log(`[Provisioning] Wrote Passenger entry point to ${entryPath}`);
 }
 
 /**
