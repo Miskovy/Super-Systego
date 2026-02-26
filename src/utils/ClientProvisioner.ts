@@ -70,8 +70,9 @@ export async function provisionNewClient(
         // 6. Generate client-specific .env file for the Node.js backend
         await generateBackendEnv(backendDestDir, clientName, frontendSubdomainUrl, dbConfig);
 
-        // 6.2 Create Passenger entry point
+        // 6.2 Create Passenger entry point and .htaccess overrides
         await generatePassengerEntryPoint(backendDestDir);
+        await generateBackendHtaccess(backendDestDir);
 
         // 6.5 Enable Node.js on the Plesk domain
         console.log(`[Provisioning] Enabling Node.js extension for api-${clientName}`);
@@ -238,6 +239,22 @@ async function generatePassengerEntryPoint(destDir: string) {
     const content = `require('./dist/src/server.js');\n`;
     await fs.writeFile(entryPath, content, 'utf-8');
     console.log(`[Provisioning] Wrote Passenger entry point to ${entryPath}`);
+}
+
+/**
+ * Helper: Generates .htaccess for the Node.js backend to override Passenger settings
+ */
+async function generateBackendHtaccess(destDir: string) {
+    const htaccessPath = path.join(destDir, '.htaccess');
+    const content = `
+PassengerNodejs /opt/plesk/node/18/bin/node
+PassengerAppType node
+PassengerStartupFile app.js
+PassengerAppRoot ${destDir}
+    `.trim();
+
+    await fs.writeFile(htaccessPath, content, 'utf-8');
+    console.log(`[Provisioning] Wrote backend .htaccess file to override Passenger to ${htaccessPath}`);
 }
 
 /**
