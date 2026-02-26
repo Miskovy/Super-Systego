@@ -210,7 +210,8 @@ SSZp2s5zvmcvIGI1rNzab3zbJjwXHx+P00KPIVhcTA==
 SHIFT_REPORT_PASSWORD=123456789
 `.trim();
 
-    await fs.writeFile(envPath, envContent, 'utf-8');
+    // Normalize Windows \r\n to Unix \n before writing — dotenv on Linux needs this for multiline values
+    await fs.writeFile(envPath, envContent.replace(/\r\n/g, '\n'), 'utf-8');
     console.log(`[Provisioning] Wrote backend .env file to ${envPath}`);
 }
 
