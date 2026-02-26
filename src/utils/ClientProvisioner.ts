@@ -382,11 +382,7 @@ export async function deployBackendForClient(clientName: string) {
     console.log(`[Provisioning] Starting automated Node.js Backend Deployment for: ${apiSubdomain}`);
 
     try {
-        // Since we develop on Windows but run on Linux, we only execute Plesk CLI if on Linux
-        if (process.platform === 'win32') {
-            console.log(`[Provisioning: Local Dev] Skipping Plesk CLI automation on Windows.`);
-            return true;
-        }
+
 
         // 1. Enable Node.js Extension via REST API
         console.log(`[Provisioning] Enabling Node.js Extension for ${apiSubdomain}...`);
