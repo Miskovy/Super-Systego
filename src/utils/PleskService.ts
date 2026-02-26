@@ -181,3 +181,47 @@ export function validateSubdomainName(name: string): string | null {
 
     return null;
 }
+
+/**
+ * Execute a Plesk CLI command utilizing the Plesk REST API.
+ * This brilliantly avoids Linux 'sudo' permission errors since the local
+ * Node.js process does not have root shell execution privileges!
+ * 
+ * @param utility - The CLI utility name (e.g., 'extension' or 'domain')
+ * @param args - Array of string arguments to pass to the utility
+ */
+export async function executePleskCli(utility: string, args: string[]): Promise<any> {
+    const { host, port, apiKey } = getPleskConfig();
+    const apiUrl = `https://${host}:${port}/api/v2/cli/${utility}/call`;
+
+    if (!apiKey) {
+        throw new Error('PLESK_API_KEY is not configured in .env');
+    }
+
+    console.log(`[Plesk API] Executing CLI command: plesk bin ${utility} ${args.join(' ')}`);
+
+    try {
+        const response = await axios.post(apiUrl, { params: args }, {
+            headers: {
+                'Content-Type': 'application/json',
+                'X-API-Key': apiKey,
+                'Accept': 'application/json'
+            },
+            httpsAgent: httpsAgent,
+        } as any);
+
+        // The REST API returns { code: 0, stdout: "...", stderr: "..." }
+        const data = response.data as any;
+        if (data && data.code !== 0) {
+            console.warn(`[Plesk API Warning] Command returned code ${data.code}. Stderr: ${data.stderr}`);
+        }
+
+        return data;
+    } catch (error: any) {
+        const message = error.response?.data?.message || error.message;
+        // Sometimes the API returns 400 or 500 with a detailed stderr in the JSON response
+        const stderr = error.response?.data?.stderr || '';
+        console.error(`[Plesk API Error] Failed to execute CLI command: ${message}. Stderr: ${stderr}`);
+        throw new Error(`Plesk CLI execution failed: ${message} - ${stderr}`);
+    }
+}

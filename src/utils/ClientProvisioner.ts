@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { createSubdomain, deleteSubdomain } from './PleskService';
+import { createSubdomain, deleteSubdomain, executePleskCli } from './PleskService';
 import { exec } from 'child_process';
 import util from 'util';
 
@@ -388,29 +388,29 @@ export async function deployBackendForClient(clientName: string) {
             return true;
         }
 
-        // 1. Enable Node.js Extension
+        // 1. Enable Node.js Extension via REST API
         console.log(`[Provisioning] Enabling Node.js Extension for ${apiSubdomain}...`);
-        await execAsync(`sudo plesk ext nodejs --enable -domain ${apiSubdomain}`);
+        await executePleskCli('extension', ['--exec', 'nodejs', '--enable', '-domain', apiSubdomain]);
 
-        // 2. Configure Startup File & Mode
+        // 2. Configure Startup File & Mode via REST API
         console.log(`[Provisioning] Setting Startup File to dist/src/server.js...`);
-        await execAsync(`sudo plesk ext nodejs --update -domain ${apiSubdomain} -startup-file dist/src/server.js -app-mode production`);
+        await executePleskCli('extension', ['--exec', 'nodejs', '--update', '-domain', apiSubdomain, '-startup-file', 'dist/src/server.js', '-app-mode', 'production']);
 
-        // 3. Disable Nginx Proxy Mode (so it routes natively to Node)
+        // 3. Disable Nginx Proxy Mode (so it routes natively to Node) via REST API
         console.log(`[Provisioning] Disabling Nginx Proxy Mode...`);
-        await execAsync(`sudo plesk bin domain -u ${apiSubdomain} -nginx-proxy false`);
+        await executePleskCli('domain', ['--update', apiSubdomain, '-nginx-proxy', 'false']);
 
-        // 4. Install NPM Dependencies
+        // 4. Install NPM Dependencies (Without sudo, as the internal user owns the destination)
         console.log(`[Provisioning] Installing NPM Production Dependencies in ${destDir}...`);
-        const { stdout: npmOut } = await execAsync(`sudo npm install --production`, {
+        const { stdout: npmOut } = await execAsync(`npm install --production`, {
             cwd: destDir,
             maxBuffer: 1024 * 1024 * 5
         });
         console.log(npmOut);
 
-        // 5. Restart the Node.js App
+        // 5. Restart the Node.js App via REST API
         console.log(`[Provisioning] Restarting Node.js App for ${apiSubdomain}...`);
-        await execAsync(`sudo plesk ext nodejs --restart -domain ${apiSubdomain}`);
+        await executePleskCli('extension', ['--exec', 'nodejs', '--restart', '-domain', apiSubdomain]);
 
         console.log(`[Provisioning] Backend Deployment completed flawlessly for ${apiSubdomain}!`);
         return true;
