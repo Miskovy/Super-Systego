@@ -60,8 +60,12 @@ export async function provisionNewClient(
         // 4. Create the necessary .htaccess for the React frontend
         await generateFrontendHtaccess(frontendDestDir);
 
-        // 4.5. Generate client-specific .env file for the React frontend
+        // 4.5. Generate client-specific .env file for the React frontend (fallback)
         await generateFrontendEnv(frontendDestDir, backendSubdomainUrl);
+
+        // 4.6. INJECT the API URL directly into the compiled Vite bundles!
+        console.log(`[Provisioning] Injecting dynamic API URLs into React bundles...`);
+        await injectApiUrlIntoBundle(frontendDestDir, `https://${backendSubdomainUrl}/api`);
 
 
         // 5. Copy Backend template (Node.js TypeScript dist folder)
@@ -299,69 +303,65 @@ async function replaceClientLogo(destDir: string, logoBase64: string) {
 }
 
 /**
+ * Helper: Recursively scans a directory and replaces the old API URL with the new one 
+ * directly inside the pre-compiled JS and HTML files.
+ */
+async function injectApiUrlIntoBundle(dirPath: string, newApiUrl: string) {
+    const oldUrlBase = 'https://bcknd.systego.net';
+
+    // Some React apps might use /api appended, some might not. 
+    // It's safest to just replace the base domain globally.
+
+    async function scanAndReplace(currentDir: string) {
+        const entries = await fs.readdir(currentDir, { withFileTypes: true });
+
+        for (const entry of entries) {
+            const fullPath = path.join(currentDir, entry.name);
+
+            if (entry.isDirectory()) {
+                await scanAndReplace(fullPath);
+            } else if (entry.isFile() && (entry.name.endsWith('.js') || entry.name.endsWith('.html') || entry.name.endsWith('.json'))) {
+                try {
+                    let content = await fs.readFile(fullPath, 'utf8');
+
+                    if (content.includes(oldUrlBase)) {
+                        // Replace all occurrences globally
+                        // Use a global regex to catch every instance
+                        const regex = new RegExp(oldUrlBase.replace(/[.*/+?^${}()|[\]\\]/g, '\\$&'), 'g');
+                        content = content.replace(regex, newApiUrl);
+
+                        await fs.writeFile(fullPath, content, 'utf8');
+                        console.log(`[Provisioning] Injected new API URL into: ${entry.name}`);
+                    }
+                } catch (err: any) {
+                    console.warn(`[Provisioning] Skipping file ${entry.name} during injection: ${err.message}`);
+                }
+            }
+        }
+    }
+
+    await scanAndReplace(dirPath);
+    console.log(`[Provisioning] Finished injecting ${newApiUrl} into compiled React bundles.`);
+}
+
+/**
  * Helper: Rebuilds the frontend by client name
  */
 export async function rebuildFrontendForClient(clientName: string) {
     const destDir = path.join(PLESK_VHOSTS_DIR, clientName);
-    return rebuildFrontend(destDir);
+    const apiSubdomain = `https://api-${clientName}.systego.net`;
+    return rebuildFrontend(destDir, apiSubdomain);
 }
 
 /**
- * Helper: Installs dependencies and rebuilds the frontend
+ * Helper: Injects the new URL without reinstalling frontend dependencies
  */
-export async function rebuildFrontend(destDir: string) {
+export async function rebuildFrontend(destDir: string, apiSubdomain: string) {
     try {
-        console.log(`[Provisioning] Running npm install && npm run build in ${destDir}...`);
-
-        // 1. Read the .env file we generated earlier to extract the VITE_API_BASE_URL
-        const envVars: Record<string, string> = {};
-        try {
-            const envContent = await fs.readFile(path.join(destDir, '.env'), 'utf-8');
-            envContent.split('\n').forEach(line => {
-                const [key, ...rest] = line.split('=');
-                if (key && rest.length > 0) {
-                    // Re-join just in case the value itself contains an equals sign like a token
-                    envVars[key.trim()] = rest.join('=').trim();
-                }
-            });
-        } catch (e) {
-            console.warn(`[Provisioning] Could not read .env file for rebuild, proceeding with default environment.`);
-        }
-
-        // Use a larger maxBuffer in case the build produces a lot of output
-        // We use --include=dev because Vite and @vitejs/plugin-react are usually 
-        // in devDependencies, which production servers often skip by default!
-        // We also delete the .vite cache folder to ensure Vite doesn't ignore our new .env variables!
-        const rmCacheCmd = process.platform === 'win32'
-            ? 'rmdir /s /q node_modules\\.vite || exit 0'
-            : 'rm -rf node_modules/.vite';
-
-        const { stdout, stderr } = await execAsync(`${rmCacheCmd} && npm install --include=dev && npm run build`, {
-            cwd: destDir,
-            maxBuffer: 1024 * 1024 * 10,
-            // 2. Explicitly inject the extracted VITE_ variables into the build process
-            env: { ...process.env, ...envVars }
-        });
-        console.log(`[Provisioning] Build output:\n${stdout}`);
-        if (stderr) {
-            console.warn(`[Provisioning] Build stderr (could be warnings):\n${stderr}`);
-        }
-
-        // 3. Move the built files from dist/ to the root of the subdomain 
-        // so Plesk serves the newly built React app, not the old one.
-        const distDir = path.join(destDir, 'dist');
-        try {
-            const distExists = await fs.access(distDir).then(() => true).catch(() => false);
-            if (distExists) {
-                console.log(`[Provisioning] Copying compiled files from dist/ to root...`);
-                await copyDirectory(distDir, destDir);
-            }
-        } catch (e: any) {
-            console.warn(`[Provisioning] Could not copy dist folder: ${e.message}`);
-        }
-
-        console.log(`[Provisioning] Frontend rebuilt successfully!`);
+        console.log(`[Provisioning] Manually injecting API URL into ${destDir}...`);
+        await injectApiUrlIntoBundle(destDir, apiSubdomain);
+        console.log(`[Provisioning] Frontend URLs explicitly set successfully!`);
     } catch (err: any) {
-        throw new Error(`Failed to rebuild frontend: ${err.message}\nOutput: ${err.stdout}\nError Output: ${err.stderr}`);
+        throw new Error(`Failed to inject frontend URLs: ${err.message}`);
     }
 }
