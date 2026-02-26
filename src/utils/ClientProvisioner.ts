@@ -341,6 +341,20 @@ export async function rebuildFrontend(destDir: string) {
         if (stderr) {
             console.warn(`[Provisioning] Build stderr (could be warnings):\n${stderr}`);
         }
+
+        // 3. Move the built files from dist/ to the root of the subdomain 
+        // so Plesk serves the newly built React app, not the old one.
+        const distDir = path.join(destDir, 'dist');
+        try {
+            const distExists = await fs.access(distDir).then(() => true).catch(() => false);
+            if (distExists) {
+                console.log(`[Provisioning] Copying compiled files from dist/ to root...`);
+                await copyDirectory(distDir, destDir);
+            }
+        } catch (e: any) {
+            console.warn(`[Provisioning] Could not copy dist folder: ${e.message}`);
+        }
+
         console.log(`[Provisioning] Frontend rebuilt successfully!`);
     } catch (err: any) {
         throw new Error(`Failed to rebuild frontend: ${err.message}\nOutput: ${err.stdout}\nError Output: ${err.stderr}`);
