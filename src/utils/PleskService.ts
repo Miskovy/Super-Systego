@@ -183,50 +183,46 @@ export function validateSubdomainName(name: string): string | null {
 }
 
 /**
- * Execute a Plesk CLI command utilizing the Plesk XML API's <cli> operator.
- * This brilliantly avoids Linux 'sudo' permission errors AND avoids REST API 
- * authorization issues, relying entirely on the proven XML API system!
+ * Execute a Plesk CLI command utilizing the Plesk REST API.
+ * This expertly bypasses the Linux 'sudo' restriction by submitting commands
+ * directly to the authenticated internal Plesk system.
  * 
- * @param utility - The CLI utility name (e.g., 'extension' or 'domain')
+ * @param utility - The CLI utility name (e.g., 'nodejs' or 'domain')
  * @param args - Array of string arguments to pass to the utility
  */
 export async function executePleskCli(utility: string, args: string[]): Promise<any> {
-    console.log(`[Plesk API] Executing CLI command via XML: plesk bin ${utility} ${args.join(' ')}`);
+    const { host, port, apiKey } = getPleskConfig();
+    const apiUrl = `https://${host}:${port}/api/v2/cli/${utility}/call`;
 
-    // The Plesk XML API supports a <cli> node that acts exactly like the server terminal.
-    // It takes a <command> (the utility) and an array of <arg> elements.
-    const argsXml = args.map(arg => `<arg>${arg}</arg>`).join('\n          ');
+    if (!apiKey) {
+        throw new Error('PLESK_API_KEY is not configured in .env');
+    }
 
-    const xmlPacket = `<?xml version="1.0" encoding="UTF-8"?>
-<packet>
-  <server>
-    <cli>
-      <call>
-        <command>${utility}</command>
-        <arguments>
-          ${argsXml}
-        </arguments>
-      </call>
-    </cli>
-  </server>
-</packet>`;
+    console.log(`[Plesk API] Executing CLI command via REST: plesk bin ${utility} ${args.join(' ')}`);
 
     try {
-        const response = await sendPleskRequest(xmlPacket);
+        const response = await axios.post(apiUrl, { params: args }, {
+            headers: {
+                'Content-Type': 'application/json',
+                'X-API-Key': apiKey,
+                'Accept': 'application/json'
+            },
+            httpsAgent: httpsAgent,
+        } as any);
 
-        // Use regex to look for <result><status>ok</status> inside <cli>
-        const statusMatch = response.match(/<status>(.*?)<\/status>/);
-        const resultMatch = response.match(/<result>(.*?)<\/result>/s);
+        const data = response.data as any;
 
-        if (statusMatch && statusMatch[1] === 'error') {
-            const errTextMatch = response.match(/<errtext>(.*?)<\/errtext>/);
-            const errText = errTextMatch ? errTextMatch[1] : 'Unknown error';
-            throw new Error(errText);
+        // Even if HTTP is 200 OK, the internal command might have failed (code != 0)
+        if (data && data.code !== 0) {
+            console.warn(`[Plesk API Warning] Command returned code ${data.code}. Stderr: ${data.stderr}`);
+            throw new Error(`Command failed with code ${data.code}: ${data.stderr || data.stdout}`);
         }
 
-        return { code: 0, response: resultMatch ? resultMatch[1] : 'Success' };
+        return data;
     } catch (error: any) {
-        console.error(`[Plesk XML CLI Error] Failed to execute ${utility}: ${error.message}`);
-        throw new Error(`Plesk XML CLI execution failed: ${error.message}`);
+        const message = error.response?.data?.message || error.message;
+        const stderr = error.response?.data?.stderr || '';
+        console.error(`[Plesk REST API Error] Failed to execute ${utility}: ${message}. Stderr: ${stderr}`);
+        throw new Error(`Plesk CLI execution failed: ${message} - ${stderr}`);
     }
 }
