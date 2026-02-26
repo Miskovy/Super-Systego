@@ -312,12 +312,30 @@ export async function rebuildFrontendForClient(clientName: string) {
 export async function rebuildFrontend(destDir: string) {
     try {
         console.log(`[Provisioning] Running npm install && npm run build in ${destDir}...`);
+
+        // 1. Read the .env file we generated earlier to extract the VITE_API_BASE_URL
+        const envVars: Record<string, string> = {};
+        try {
+            const envContent = await fs.readFile(path.join(destDir, '.env'), 'utf-8');
+            envContent.split('\n').forEach(line => {
+                const [key, ...rest] = line.split('=');
+                if (key && rest.length > 0) {
+                    // Re-join just in case the value itself contains an equals sign like a token
+                    envVars[key.trim()] = rest.join('=').trim();
+                }
+            });
+        } catch (e) {
+            console.warn(`[Provisioning] Could not read .env file for rebuild, proceeding with default environment.`);
+        }
+
         // Use a larger maxBuffer in case the build produces a lot of output
         // We use --include=dev because Vite and @vitejs/plugin-react are usually 
         // in devDependencies, which production servers often skip by default!
         const { stdout, stderr } = await execAsync('npm install --include=dev && npm run build', {
             cwd: destDir,
-            maxBuffer: 1024 * 1024 * 10
+            maxBuffer: 1024 * 1024 * 10,
+            // 2. Explicitly inject the extracted VITE_ variables into the build process
+            env: { ...process.env, ...envVars }
         });
         console.log(`[Provisioning] Build output:\n${stdout}`);
         if (stderr) {
