@@ -10,7 +10,7 @@ import {
   sanitizeSubdomainName,
   validateSubdomainName,
 } from '../../utils/PleskService';
-import { provisionNewClient } from '../../utils/ClientProvisioner';
+import { provisionNewClient, rebuildFrontendForClient } from '../../utils/ClientProvisioner';
 
 export const getAllClients = asyncHandler(async (req, res) => {
   const clients = await ClientModel.find()
@@ -228,6 +228,30 @@ export const getClientsByStatus = asyncHandler(async (req, res) => {
     .populate('package_id');
 
   return SuccessResponse(res, { message: `Clients with status ${status} retrieved successfully`, data: clients }, 200);
+});
+
+export const rebuildClientFrontend = asyncHandler(async (req, res) => {
+  const id = req.params.id;
+  const client = await ClientModel.findById(id);
+
+  if (!client) {
+    throw new NotFound('Client not found');
+  }
+
+  if (!client.subdomain) {
+    res.status(400).json({ success: false, message: 'Client has no subdomain' });
+    return;
+  }
+
+  try {
+    await rebuildFrontendForClient(client.subdomain);
+    return SuccessResponse(res, { message: 'Frontend rebuilt successfully' }, 200);
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: `Failed to rebuild frontend: ${error.message}`
+    });
+  }
 });
 
 export const select = asyncHandler(async (req, res) => {

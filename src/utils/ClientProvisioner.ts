@@ -63,8 +63,6 @@ export async function provisionNewClient(
         // 4.5. Generate client-specific .env file for the React frontend
         await generateFrontendEnv(frontendDestDir, backendSubdomainUrl);
 
-        // 4.6. Rebuild frontend
-        await rebuildFrontend(frontendDestDir);
 
         // 5. Copy Backend template (Node.js TypeScript dist folder)
         console.log(`[Provisioning] Copying backend files to ${backendDestDir}`);
@@ -301,9 +299,17 @@ async function replaceClientLogo(destDir: string, logoBase64: string) {
 }
 
 /**
+ * Helper: Rebuilds the frontend by client name
+ */
+export async function rebuildFrontendForClient(clientName: string) {
+    const destDir = path.join(PLESK_VHOSTS_DIR, clientName);
+    return rebuildFrontend(destDir);
+}
+
+/**
  * Helper: Installs dependencies and rebuilds the frontend
  */
-async function rebuildFrontend(destDir: string) {
+export async function rebuildFrontend(destDir: string) {
     try {
         console.log(`[Provisioning] Running npm install && npm run build in ${destDir}...`);
         // Use a larger maxBuffer in case the build produces a lot of output
