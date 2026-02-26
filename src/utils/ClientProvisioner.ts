@@ -1,6 +1,10 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { createSubdomain, deleteSubdomain } from './PleskService';
+import { exec } from 'child_process';
+import util from 'util';
+
+const execAsync = util.promisify(exec);
 
 // ============================================================================
 // Configuration
@@ -58,6 +62,9 @@ export async function provisionNewClient(
 
         // 4.5. Generate client-specific .env file for the React frontend
         await generateFrontendEnv(frontendDestDir, backendSubdomainUrl);
+
+        // 4.6. Rebuild frontend
+        await rebuildFrontend(frontendDestDir);
 
         // 5. Copy Backend template (Node.js TypeScript dist folder)
         console.log(`[Provisioning] Copying backend files to ${backendDestDir}`);
@@ -290,5 +297,26 @@ async function replaceClientLogo(destDir: string, logoBase64: string) {
         }
     } catch (e: any) {
         console.error(`[Provisioning] Failed to replace custom logo: ${e.message}`);
+    }
+}
+
+/**
+ * Helper: Installs dependencies and rebuilds the frontend
+ */
+async function rebuildFrontend(destDir: string) {
+    try {
+        console.log(`[Provisioning] Running npm install && npm run build in ${destDir}...`);
+        // Use a larger maxBuffer in case the build produces a lot of output
+        const { stdout, stderr } = await execAsync('npm install && npm run build', {
+            cwd: destDir,
+            maxBuffer: 1024 * 1024 * 10
+        });
+        console.log(`[Provisioning] Build output:\n${stdout}`);
+        if (stderr) {
+            console.warn(`[Provisioning] Build stderr (could be warnings):\n${stderr}`);
+        }
+        console.log(`[Provisioning] Frontend rebuilt successfully!`);
+    } catch (err: any) {
+        throw new Error(`Failed to rebuild frontend: ${err.message}\nOutput: ${err.stdout}\nError Output: ${err.stderr}`);
     }
 }
