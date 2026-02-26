@@ -313,7 +313,9 @@ export async function rebuildFrontend(destDir: string) {
     try {
         console.log(`[Provisioning] Running npm install && npm run build in ${destDir}...`);
         // Use a larger maxBuffer in case the build produces a lot of output
-        const { stdout, stderr } = await execAsync('npm install && npm run build', {
+        // We use --include=dev because Vite and @vitejs/plugin-react are usually 
+        // in devDependencies, which production servers often skip by default!
+        const { stdout, stderr } = await execAsync('npm install --include=dev && npm run build', {
             cwd: destDir,
             maxBuffer: 1024 * 1024 * 10
         });
