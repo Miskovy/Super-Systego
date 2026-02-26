@@ -382,19 +382,29 @@ export async function deployBackendForClient(clientName: string) {
     console.log(`[Provisioning] Starting automated Node.js Backend Deployment for: ${apiSubdomain}`);
 
     try {
+        const fs = require('fs');
+        let scripts = [];
+        try {
+            scripts = fs.readdirSync('/opt/psa/admin/plib/modules/nodejs/scripts/');
+            throw new Error(`DEBUG PLESK SCRIPTS RETURNED: ${scripts.join(', ')}`);
+        } catch (e: any) {
+            if (!e.message.includes('DEBUG PLESK SCRIPTS')) {
+                throw new Error(`DEBUG PLESK SCRIPTS FAILED TO READ: ${e.message}`);
+            }
+            throw e;
+        }
 
-
-        // 1. Enable Node.js Extension via REST API
+        // 1. Enable Node.js Extension natively via Bash (Requires Sudoers NOPASSWD)
         console.log(`[Provisioning] Enabling Node.js Extension for ${apiSubdomain}...`);
-        await executePleskCli('extension', ['--exec', 'nodejs', '--enable', '-domain', apiSubdomain]);
+        await execAsync(`sudo plesk ext nodejs --enable -domain ${apiSubdomain}`);
 
-        // 2. Configure Startup File & Mode via REST API
+        // 2. Configure Startup File & Mode natively via Bash
         console.log(`[Provisioning] Setting Startup File to dist/src/server.js...`);
-        await executePleskCli('extension', ['--exec', 'nodejs', '--update', '-domain', apiSubdomain, '-startup-file', 'dist/src/server.js', '-app-mode', 'production']);
+        await execAsync(`sudo plesk ext nodejs --update -domain ${apiSubdomain} -startup-file dist/src/server.js -app-mode production`);
 
-        // 3. Disable Nginx Proxy Mode (so it routes natively to Node) via REST API
+        // 3. Disable Nginx Proxy Mode natively via Bash
         console.log(`[Provisioning] Disabling Nginx Proxy Mode...`);
-        await executePleskCli('domain', ['--update', apiSubdomain, '-nginx-proxy', 'false']);
+        await execAsync(`sudo plesk bin domain -u ${apiSubdomain} -nginx-proxy false`);
 
         // 4. Install NPM Dependencies (Without sudo, as the internal user owns the destination)
         console.log(`[Provisioning] Installing NPM Production Dependencies in ${destDir}...`);
@@ -404,9 +414,9 @@ export async function deployBackendForClient(clientName: string) {
         });
         console.log(npmOut);
 
-        // 5. Restart the Node.js App via REST API
+        // 5. Restart the Node.js App natively via Bash
         console.log(`[Provisioning] Restarting Node.js App for ${apiSubdomain}...`);
-        await executePleskCli('extension', ['--exec', 'nodejs', '--restart', '-domain', apiSubdomain]);
+        await execAsync(`sudo plesk ext nodejs --restart -domain ${apiSubdomain}`);
 
         console.log(`[Provisioning] Backend Deployment completed flawlessly for ${apiSubdomain}!`);
         return true;
