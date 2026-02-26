@@ -390,27 +390,35 @@ export async function deployBackendForClient(clientName: string) {
         const pleskPort = process.env.PLESK_PORT || '8443';
         const pleskApiKey = process.env.PLESK_API_KEY;
 
-        // First, try to get the list of available CLI commands
-        const cliRes = await axios.get(`https://${pleskHost}:${pleskPort}/api/v2/cli/commands`, {
-            headers: { 'X-API-Key': pleskApiKey, 'Accept': 'application/json' },
-            httpsAgent: agent
-        } as any);
-
-        const commands = JSON.stringify(cliRes.data);
-
-        // Also check if there's a dedicated nodejs endpoint
-        let nodejsEndpoint = 'NOT FOUND';
+        // Step 1: Get extension utility help to discover its subcommands
+        let extHelp = '';
         try {
-            const njRes = await axios.get(`https://${pleskHost}:${pleskPort}/api/v2/cli/nodejs/`, {
-                headers: { 'X-API-Key': pleskApiKey, 'Accept': 'application/json' },
-                httpsAgent: agent
-            } as any);
-            nodejsEndpoint = JSON.stringify(njRes.data);
-        } catch (e2: any) {
-            nodejsEndpoint = `Error: ${e2.response?.status} - ${JSON.stringify(e2.response?.data || e2.message)}`;
+            const helpRes = await axios.post(`https://${pleskHost}:${pleskPort}/api/v2/cli/extension/call`,
+                { params: ['--help'] },
+                {
+                    headers: { 'X-API-Key': pleskApiKey, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    httpsAgent: agent
+                } as any);
+            extHelp = helpRes.data?.stdout || JSON.stringify(helpRes.data);
+        } catch (e1: any) {
+            extHelp = `Error: ${e1.response?.status} - ${JSON.stringify(e1.response?.data || e1.message).substring(0, 500)}`;
         }
 
-        throw new Error(`DEBUG CLI COMMANDS: ${commands.substring(0, 1500)} ||| NODEJS ENDPOINT: ${nodejsEndpoint}`);
+        // Step 2: Try --call instead of --exec to invoke the extension's CLI handler
+        let callResult = '';
+        try {
+            const callRes = await axios.post(`https://${pleskHost}:${pleskPort}/api/v2/cli/extension/call`,
+                { params: ['--call', 'nodejs', '--enable', '-domain', apiSubdomain] },
+                {
+                    headers: { 'X-API-Key': pleskApiKey, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    httpsAgent: agent
+                } as any);
+            callResult = `SUCCESS: ${JSON.stringify(callRes.data).substring(0, 500)}`;
+        } catch (e2: any) {
+            callResult = `Error: ${e2.response?.status} - ${JSON.stringify(e2.response?.data || e2.message).substring(0, 500)}`;
+        }
+
+        throw new Error(`EXT HELP: ${extHelp.substring(0, 1200)} ||| CALL RESULT: ${callResult}`);
 
     } catch (err: any) {
         throw new Error(`Failed to completely deploy backend on Plesk: ${err.message}`);
