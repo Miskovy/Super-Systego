@@ -196,11 +196,15 @@ export async function enableNodeJsOnDomain(subdomainName: string): Promise<void>
 
   const xmlPacket = `<?xml version="1.0" encoding="UTF-8"?>
 <packet>
-  <nodejs>
-    <enable>
-      <domain>${fullSubdomain}</domain>
-    </enable>
-  </nodejs>
+  <extension>
+    <call>
+      <nodejs>
+        <enable>
+          <domain>${fullSubdomain}</domain>
+        </enable>
+      </nodejs>
+    </call>
+  </extension>
 </packet>`;
 
   const response = await sendPleskRequest(xmlPacket);
