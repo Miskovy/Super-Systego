@@ -376,45 +376,97 @@ export async function rebuildFrontend(destDir: string, apiSubdomain: string) {
  * 4. Installs Production NPM dependencies
  * 5. Restarts the application
  */
+// export async function deployBackendForClient(clientName: string, backendSubdomainUrl: string, backendDestDir: string) {
+//     console.log(`[Provisioning] Deploying Node.js backend for ${backendSubdomainUrl}...`);
+
+//     // REPLACE THIS with your actual Plesk system user for the subscription (e.g., 'systego', 'admin', etc.)
+//     const PLESK_SYSUSER = 'YOUR_PLESK_SYSUSER';
+
+//     try {
+//         console.log(`[Provisioning] Enabling Node.js extension...`);
+//         await executePleskCli('extension', ['--call', 'nodejs', '--enable', '-domain', backendSubdomainUrl]);
+
+//         console.log(`[Provisioning] Configuring Node.js Application Root...`);
+//         const relativeAppRoot = `/subdomains/api-${clientName}`;
+//         await executePleskCli('extension', [
+//             '--call', 'nodejs', '--update',
+//             '-domain', backendSubdomainUrl,
+//             '-app-root', relativeAppRoot
+//         ]);
+
+//         console.log(`[Provisioning] Generating app.js shim for Plesk default startup...`);
+//         const appJsPath = path.join(backendDestDir, 'app.js');
+//         // If your backend is CommonJS, keep require(). If ESM, use: await fs.writeFile(appJsPath, `import('./dist/server.js');\n`, 'utf-8');
+//         await fs.writeFile(appJsPath, `require('./dist/server.js');\n`, 'utf-8');
+
+//         console.log(`[Provisioning] Disabling Nginx proxy mode...`);
+//         await executePleskCli('domain', ['--update-web-server-settings', backendSubdomainUrl, '-nginx-proxy-mode', 'false']);
+
+//         console.log(`[Provisioning] Installing NPM dependencies for backend...`);
+//         // We run npm install first. It might run as root, which is why the next step is crucial.
+//         await execAsync('npm install --production', { cwd: backendDestDir });
+
+//         console.log(`[Provisioning] Fixing file ownership for Plesk Passenger...`);
+//         // This is the magic bullet for Plesk 502s. It ensures Passenger can read your app.
+//         // psacln is the standard Plesk group for web files.
+//         await execAsync(`chown -R ${PLESK_SYSUSER}:psacln ${backendDestDir}`);
+
+//         console.log(`[Provisioning] Restarting backend Node.js app...`);
+//         await triggerNodeRestart(backendDestDir);
+
+//         console.log(`[Provisioning] Backend successfully deployed and started up.`);
+//     } catch (error: any) {
+//         console.error(`[Provisioning] Error deploying nodejs backend for ${clientName}`, error);
+//         throw error;
+//     }
+// }
 export async function deployBackendForClient(clientName: string, backendSubdomainUrl: string, backendDestDir: string) {
     console.log(`[Provisioning] Deploying Node.js backend for ${backendSubdomainUrl}...`);
 
     try {
-        // 1. Enables Node.js extension for the backend subdomain
-        console.log(`[Provisioning] Enabling Node.js extension...`);
-        await executePleskCli('extension', ['--call', 'nodejs', '--enable', '-domain', backendSubdomainUrl]);
+        // ... (Your existing Node.js extension and app root setup code) ...
 
-        // 2. Configure the Node.js application root directory
-        // By default Plesk sets the app root to the document root's parent folder.
-        // We MUST point it precisely to the api-client subdomain folder.
-        console.log(`[Provisioning] Configuring Node.js Application Root...`);
-        const relativeAppRoot = `/subdomains/api-${clientName}`;
-        await executePleskCli('extension', [
-            '--call', 'nodejs', '--update',
-            '-domain', backendSubdomainUrl,
-            '-app-root', relativeAppRoot
-        ]);
+        // console.log(`[Provisioning] Installing NPM dependencies for backend...`);
+        // // We run npm install first. (Runs as root/admin)
+        // await execAsync('npm install --production', { cwd: backendDestDir });
 
-        // 2.5 Generate a root app.js shim to satisfy Plesk's default startup file expectations
-        console.log(`[Provisioning] Generating app.js shim for Plesk default startup...`);
-        const appJsPath = path.join(backendDestDir, 'app.js');
-        await fs.writeFile(appJsPath, `require('./dist/server.js');\n`, 'utf-8');
-        console.log(`[Provisioning] Disabling Nginx proxy mode...`);
-        await executePleskCli('domain', ['--update-web-server-settings', backendSubdomainUrl, '-nginx-proxy-mode', 'false']);
+        // console.log(`[Provisioning] Fetching dynamic system user for permissions...`);
+        // 1. Grab the system user dynamically!
+        // We pass the parent path (PLESK_VHOSTS_DIR) because the new backendDestDir might temporarily be owned by root
+        const pleskSysUser = await getPleskSystemUser(PLESK_VHOSTS_DIR);
+        console.log(`[Provisioning] Detected Plesk system user: ${pleskSysUser}`);
+        return pleskSysUser;
+        // console.log(`[Provisioning] Fixing file ownership for Plesk Passenger...`);
+        // // 2. Apply the dynamic user to the chown command
+        // // 'psacln' is the standard Plesk group for web files
+        // await execAsync(`chown -R ${pleskSysUser}:psacln ${backendDestDir}`);
 
-        // 4. Installs Production NPM dependencies
-        console.log(`[Provisioning] Installing NPM dependencies for backend...`);
-        // We use execAsync directly in the destination directory because resolving NPM via Plesk CLI
-        // is complex, but the local SuperAdmin Node.js process has access to execute local binaries.
-        await execAsync('npm install --production', { cwd: backendDestDir });
+        // console.log(`[Provisioning] Restarting backend Node.js app...`);
+        // await triggerNodeRestart(backendDestDir);
 
-        // 5. Restarts the application
-        console.log(`[Provisioning] Restarting backend Node.js app...`);
-        await triggerNodeRestart(backendDestDir);
-
-        console.log(`[Provisioning] Backend successfully deployed and started up.`);
+        // console.log(`[Provisioning] Backend successfully deployed and started up.`);
     } catch (error: any) {
         console.error(`[Provisioning] Error deploying nodejs backend for ${clientName}`, error);
         throw error;
+    }
+}
+
+/**
+ * Helper: Dynamically fetches the Plesk system user (owner) of the vhosts directory.
+ * This ensures file permissions align perfectly with Phusion Passenger.
+ */
+async function getPleskSystemUser(vhostsDir: string): Promise<string> {
+    try {
+        // 'stat -c "%U"' returns just the username of the folder's owner
+        const { stdout } = await execAsync(`stat -c "%U" ${vhostsDir}`);
+        const sysUser = stdout.trim();
+
+        if (!sysUser || sysUser === 'root') {
+            throw new Error(`Invalid system user detected: ${sysUser}. Check directory paths.`);
+        }
+
+        return sysUser;
+    } catch (error: any) {
+        throw new Error(`Failed to dynamically fetch Plesk system user: ${error.message}`);
     }
 }
