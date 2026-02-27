@@ -271,9 +271,11 @@ export const deployClientBackend = asyncHandler(async (req, res) => {
   }
 
   try {
-    // This process takes 1-2 minutes to run npm install and configure Plesk
-    await deployBackendForClient(client.subdomain);
-    return SuccessResponse(res, { message: 'Backend Node.js application deployed and restarted successfully' }, 200);
+    const result = await deployBackendForClient(client.subdomain);
+    return SuccessResponse(res, {
+      message: 'Backend deployed. Check diagnostics for CLI discovery.',
+      ...result
+    }, 200);
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to deploy backend on Plesk', error: error.message });
   }
