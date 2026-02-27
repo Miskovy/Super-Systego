@@ -376,117 +376,40 @@ export async function rebuildFrontend(destDir: string, apiSubdomain: string) {
  * 4. Installs Production NPM dependencies
  * 5. Restarts the application
  */
-export async function deployBackendForClient(clientName: string) {
-    const apiSubdomain = `api-${clientName}.systego.net`;
-    const destDir = path.join(PLESK_VHOSTS_DIR, `api-${clientName}`);
-
-    console.log(`[Provisioning] Starting automated Node.js Backend Deployment for: ${apiSubdomain}`);
-
-    const diagnostics: string[] = [];
+export async function deployBackendForClient(clientName: string, backendSubdomainUrl: string, backendDestDir: string) {
+    console.log(`[Provisioning] Deploying Node.js backend for ${backendSubdomainUrl}...`);
 
     try {
-        // 1. Enable Node.js Extension
-        console.log(`[Provisioning] Enabling Node.js Extension for ${apiSubdomain}...`);
-        await executePleskCli('extension', ['--call', 'nodejs', '--enable', '-domain', apiSubdomain]);
+        // 1. Enables Node.js extension for the backend subdomain
+        console.log(`[Provisioning] Enabling Node.js extension...`);
+        await executePleskCli('ext', ['nodejs', '--enable', '-domain', backendSubdomainUrl]);
 
-        // 2. PROBE: Try direct Plesk REST API v2 endpoints (not CLI wrappers)
-        const pleskHost = process.env.PLESK_HOST || 'localhost';
-        const pleskPort = process.env.PLESK_PORT || '8443';
-        const pleskApiKey = process.env.PLESK_API_KEY || '';
-        const https = require('https');
-        const axios = require('axios');
-        const agent = new https.Agent({ rejectUnauthorized: false });
+        // 2. Sets startup file and app mode
+        console.log(`[Provisioning] Configuring Node.js app mode and startup file...`);
+        await executePleskCli('ext', [
+            'nodejs', '--update',
+            '-domain', backendSubdomainUrl,
+            '-startup-file', 'dist/server.js',
+            '-app-mode', 'production'
+        ]);
 
-        const apiEndpoints = [
-            // First: find the domain ID by listing all and filtering
-            { method: 'GET', url: `/api/v2/domains`, desc: 'All domains (find ID)', maxLen: 3000 },
-            // Try direct domain endpoint by name
-            { method: 'GET', url: `/api/v2/domains?name=${apiSubdomain}`, desc: 'Domain by name' },
-            // Try extensions endpoint
-            { method: 'GET', url: `/api/v2/extensions`, desc: 'Extensions list' },
-            { method: 'GET', url: `/api/v2/extensions/nodejs`, desc: 'Node.js extension' },
-        ];
+        // 3. Disables Nginx Proxy Mode
+        console.log(`[Provisioning] Disabling Nginx proxy mode...`);
+        await executePleskCli('site', ['--update', backendSubdomainUrl, '-nginx-proxy-mode', 'false']);
 
-        // Find domain ID from domains list
-        let domainId: number | null = null;
-        for (const ep of apiEndpoints) {
-            try {
-                const resp = await axios({
-                    method: ep.method,
-                    url: `https://${pleskHost}:${pleskPort}${ep.url}`,
-                    headers: { 'X-API-Key': pleskApiKey, 'Accept': 'application/json' },
-                    httpsAgent: agent,
-                });
-                const maxLen = (ep as any).maxLen || 800;
-                const data = JSON.stringify(resp.data).substring(0, maxLen);
-                diagnostics.push(`=== ${ep.desc} ===\n${data}`);
+        // 4. Installs Production NPM dependencies
+        console.log(`[Provisioning] Installing NPM dependencies for backend...`);
+        // We use execAsync directly in the destination directory because resolving NPM via Plesk CLI
+        // is complex, but the local SuperAdmin Node.js process has access to execute local binaries.
+        await execAsync('npm install --production', { cwd: backendDestDir });
 
-                // Extract domain ID
-                if (ep.url.includes('/domains') && Array.isArray(resp.data)) {
-                    const found = resp.data.find((d: any) => d.name === apiSubdomain);
-                    if (found) domainId = found.id;
-                }
-            } catch (e: any) {
-                const errData = e.response?.data ? JSON.stringify(e.response.data).substring(0, 200) : e.message;
-                diagnostics.push(`${ep.desc} error: ${e.response?.status || 'N/A'} - ${errData}`);
-            }
-        }
+        // 5. Restarts the application
+        console.log(`[Provisioning] Restarting backend Node.js app...`);
+        await triggerNodeRestart(backendDestDir);
 
-        // If we found the domain ID, probe domain-specific endpoints
-        if (domainId) {
-            diagnostics.push(`\n=== Found domain ID: ${domainId} ===`);
-            const domainEndpoints = [
-                { method: 'GET', url: `/api/v2/domains/${domainId}`, desc: 'Domain detail' },
-                { method: 'GET', url: `/api/v2/domains/${domainId}/hosting`, desc: 'Domain hosting' },
-                { method: 'GET', url: `/api/v2/domains/${domainId}/hosting/nodejs`, desc: 'Domain Node.js' },
-            ];
-            for (const ep of domainEndpoints) {
-                try {
-                    const resp = await axios({
-                        method: ep.method,
-                        url: `https://${pleskHost}:${pleskPort}${ep.url}`,
-                        headers: { 'X-API-Key': pleskApiKey, 'Accept': 'application/json' },
-                        httpsAgent: agent,
-                    });
-                    diagnostics.push(`=== ${ep.desc} ===\n${JSON.stringify(resp.data).substring(0, 1000)}`);
-                } catch (e: any) {
-                    const errData = e.response?.data ? JSON.stringify(e.response.data).substring(0, 200) : e.message;
-                    diagnostics.push(`${ep.desc} error: ${e.response?.status || 'N/A'} - ${errData}`);
-                }
-            }
-        }
-
-
-
-
-        // 5. Create app.js wrapper
-        console.log(`[Provisioning] Creating app.js startup wrapper...`);
-        const appJsContent = [
-            '// Auto-generated by Systego Provisioner - Plesk Startup File',
-            "require('dotenv').config({ path: __dirname + '/.env' });",
-            "process.env.NODE_ENV = 'production';",
-            '',
-            'try {',
-            "    require('./dist/src/server.js');",
-            '} catch (err) {',
-            "    console.error('[Systego Boot] FATAL:', err.message, err.stack);",
-            "    const http = require('http');",
-            '    http.createServer((req, res) => {',
-            "        res.writeHead(500, { 'Content-Type': 'application/json' });",
-            '        res.end(JSON.stringify({ error: err.message, stack: err.stack }));',
-            '    }).listen(process.env.PORT || 3000);',
-            '}',
-        ].join('\n');
-        await fs.writeFile(path.join(destDir, 'app.js'), appJsContent, 'utf-8');
-
-        // 6. Disable Nginx Proxy Mode
-        console.log(`[Provisioning] Disabling Nginx Proxy Mode...`);
-        await executePleskCli('domain', ['--update-web-server-settings', apiSubdomain, '-nginx-proxy-mode', 'false']);
-
-        console.log(`[Provisioning] Backend config deployed for ${apiSubdomain}!`);
-        return { success: true, diagnostics };
-
-    } catch (err: any) {
-        return { success: false, error: err.message, diagnostics };
+        console.log(`[Provisioning] Backend successfully deployed and started up.`);
+    } catch (error: any) {
+        console.error(`[Provisioning] Error deploying nodejs backend for ${clientName}`, error);
+        throw error;
     }
 }
