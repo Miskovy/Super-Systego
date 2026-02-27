@@ -383,10 +383,9 @@ export async function deployBackendForClient(clientName: string) {
     console.log(`[Provisioning] Starting automated Node.js Backend Deployment for: ${apiSubdomain}`);
 
     try {
-        // 1. Enable Node.js Extension via REST API (using --call, NOT --exec)
+        // 1. Enable Node.js Extension via REST API
         console.log(`[Provisioning] Enabling Node.js Extension for ${apiSubdomain}...`);
-        await executePleskCli('extension', ['--call', 'nodejs', '--enable', '-domain', apiSubdomain, '-startup-file', `api-${clientName}/app.js`]);
-
+        await executePleskCli('extension', ['--call', 'nodejs', '--enable', '-domain', apiSubdomain]);
 
         // 2. Create app.js wrapper (Plesk default startup file) that loads our actual entry point
         console.log(`[Provisioning] Creating app.js startup wrapper...`);
@@ -409,28 +408,36 @@ export async function deployBackendForClient(clientName: string) {
         ].join('\n');
         await fs.writeFile(path.join(destDir, 'app.js'), appJsContent, 'utf-8');
 
-        // 3. Disable Nginx Proxy Mode via REST API (must use --update-web-server-settings)
+        // 3. Disable Nginx Proxy Mode via REST API
         console.log(`[Provisioning] Disabling Nginx Proxy Mode...`);
         await executePleskCli('domain', ['--update-web-server-settings', apiSubdomain, '-nginx-proxy-mode', 'false']);
 
-        // 4. Clean install NPM Dependencies (remove old node_modules to prevent corruption)
-        console.log(`[Provisioning] Cleaning and installing NPM Production Dependencies in ${destDir}...`);
-        await execAsync(`rm -rf node_modules`, { cwd: destDir }).catch(() => { });
-        const { stdout: npmOut } = await execAsync(`npm install --omit=dev`, {
+        // 4. Kick off npm install + restart as a BACKGROUND shell script
+        // This MUST run detached (via nohup) so it survives the HTTP connection timeout.
+        // Nginx kills the HTTP response after ~60s, which kills npm install mid-way.
+        const logFile = `/tmp/systego-deploy-${clientName}.log`;
+        const bgScript = [
+            `cd ${destDir}`,
+            `echo "[$(date)] Starting npm install..." >> ${logFile}`,
+            `rm -rf node_modules`,
+            `npm install --omit=dev >> ${logFile} 2>&1`,
+            `echo "[$(date)] npm install completed with exit code $?" >> ${logFile}`,
+            // Restart the Node.js app after install completes
+            `plesk bin extension --call nodejs --disable -domain ${apiSubdomain} >> ${logFile} 2>&1`,
+            `plesk bin extension --call nodejs --enable -domain ${apiSubdomain} >> ${logFile} 2>&1`,
+            `echo "[$(date)] Deployment complete!" >> ${logFile}`,
+        ].join(' && ');
+
+        console.log(`[Provisioning] Launching background npm install (log: ${logFile})...`);
+        await execAsync(`nohup bash -c '${bgScript}' > /dev/null 2>&1 &`, {
             cwd: destDir,
-            maxBuffer: 1024 * 1024 * 10
-        });
-        console.log(npmOut);
+            timeout: 5000 // Just needs time to spawn, not to complete
+        }).catch(() => { });
 
-        // 5. Restart the Node.js App by toggling disable/enable (Plesk extension has no --restart)
-        console.log(`[Provisioning] Restarting Node.js App for ${apiSubdomain}...`);
-        await executePleskCli('extension', ['--call', 'nodejs', '--disable', '-domain', apiSubdomain]);
-        await executePleskCli('extension', ['--call', 'nodejs', '--enable', '-domain', apiSubdomain]);
-
-        console.log(`[Provisioning] Backend Deployment completed flawlessly for ${apiSubdomain}!`);
+        console.log(`[Provisioning] Backend config deployed for ${apiSubdomain}! npm install running in background.`);
         return true;
 
     } catch (err: any) {
-        throw new Error(`Failed to completely deploy backend on Plesk: ${err.message}`);
+        throw new Error(`Failed to deploy backend on Plesk: ${err.message}`);
     }
 }
