@@ -384,15 +384,10 @@ export async function deployBackendForClient(clientName: string, backendSubdomai
         console.log(`[Provisioning] Enabling Node.js extension...`);
         await executePleskCli('extension', ['--call', 'nodejs', '--enable', '-domain', backendSubdomainUrl]);
 
-        // 2. Sets startup file and app mode
-        console.log(`[Provisioning] Configuring Node.js app mode and startup file...`);
-
-        // Use standard nodejs CLI available in plesk bin instead of extension
-        await executePleskCli('nodejs', [
-            '--update', backendSubdomainUrl,
-            '-startup-file', 'dist/server.js',
-            '-app-mode', 'production'
-        ]);
+        // 2. Generate a root app.js shim to satisfy Plesk's default startup file expectations
+        console.log(`[Provisioning] Generating app.js shim for Plesk default startup...`);
+        const appJsPath = path.join(backendDestDir, 'app.js');
+        await fs.writeFile(appJsPath, `require('./dist/server.js');\n`, 'utf-8');
 
         // 3. Disables Nginx Proxy Mode
         console.log(`[Provisioning] Disabling Nginx proxy mode...`);
