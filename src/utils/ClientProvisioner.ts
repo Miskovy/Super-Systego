@@ -398,10 +398,17 @@ export async function deployBackendForClient(clientName: string) {
         const agent = new https.Agent({ rejectUnauthorized: false });
 
         const apiEndpoints = [
-            { method: 'GET', url: `/api/v2/domains`, desc: 'List domains' },
-            { method: 'GET', url: `/api/v2/cli`, desc: 'List CLI utilities' },
+            // First: find the domain ID by listing all and filtering
+            { method: 'GET', url: `/api/v2/domains`, desc: 'All domains (find ID)', maxLen: 3000 },
+            // Try direct domain endpoint by name
+            { method: 'GET', url: `/api/v2/domains?name=${apiSubdomain}`, desc: 'Domain by name' },
+            // Try extensions endpoint
+            { method: 'GET', url: `/api/v2/extensions`, desc: 'Extensions list' },
+            { method: 'GET', url: `/api/v2/extensions/nodejs`, desc: 'Node.js extension' },
         ];
 
+        // Find domain ID from domains list
+        let domainId: number | null = null;
         for (const ep of apiEndpoints) {
             try {
                 const resp = await axios({
@@ -410,13 +417,45 @@ export async function deployBackendForClient(clientName: string) {
                     headers: { 'X-API-Key': pleskApiKey, 'Accept': 'application/json' },
                     httpsAgent: agent,
                 });
-                const data = JSON.stringify(resp.data).substring(0, 500);
-                diagnostics.push(`=== ${ep.desc} (${ep.method} ${ep.url}) ===\n${data}`);
+                const maxLen = (ep as any).maxLen || 800;
+                const data = JSON.stringify(resp.data).substring(0, maxLen);
+                diagnostics.push(`=== ${ep.desc} ===\n${data}`);
+
+                // Extract domain ID
+                if (ep.url.includes('/domains') && Array.isArray(resp.data)) {
+                    const found = resp.data.find((d: any) => d.name === apiSubdomain);
+                    if (found) domainId = found.id;
+                }
             } catch (e: any) {
-                const errData = e.response?.data ? JSON.stringify(e.response.data).substring(0, 300) : e.message;
+                const errData = e.response?.data ? JSON.stringify(e.response.data).substring(0, 200) : e.message;
                 diagnostics.push(`${ep.desc} error: ${e.response?.status || 'N/A'} - ${errData}`);
             }
         }
+
+        // If we found the domain ID, probe domain-specific endpoints
+        if (domainId) {
+            diagnostics.push(`\n=== Found domain ID: ${domainId} ===`);
+            const domainEndpoints = [
+                { method: 'GET', url: `/api/v2/domains/${domainId}`, desc: 'Domain detail' },
+                { method: 'GET', url: `/api/v2/domains/${domainId}/hosting`, desc: 'Domain hosting' },
+                { method: 'GET', url: `/api/v2/domains/${domainId}/hosting/nodejs`, desc: 'Domain Node.js' },
+            ];
+            for (const ep of domainEndpoints) {
+                try {
+                    const resp = await axios({
+                        method: ep.method,
+                        url: `https://${pleskHost}:${pleskPort}${ep.url}`,
+                        headers: { 'X-API-Key': pleskApiKey, 'Accept': 'application/json' },
+                        httpsAgent: agent,
+                    });
+                    diagnostics.push(`=== ${ep.desc} ===\n${JSON.stringify(resp.data).substring(0, 1000)}`);
+                } catch (e: any) {
+                    const errData = e.response?.data ? JSON.stringify(e.response.data).substring(0, 200) : e.message;
+                    diagnostics.push(`${ep.desc} error: ${e.response?.status || 'N/A'} - ${errData}`);
+                }
+            }
+        }
+
 
 
 
