@@ -13,8 +13,10 @@ import {
 import {
   provisionNewClient,
   rebuildFrontendForClient,
-  deployBackendForClient
+  deployBackendForClient,
+  generateBackendEnv
 } from '../../utils/ClientProvisioner';
+import { executePleskCli } from '../../utils/PleskService';
 
 export const getAllClients = asyncHandler(async (req, res) => {
   const clients = await ClientModel.find()
@@ -277,6 +279,43 @@ export const deployClientBackend = asyncHandler(async (req, res) => {
   }
 });
 
+export const regenerateClientEnv = asyncHandler(async (req, res) => {
+  const id = req.params.id;
+  const client = await ClientModel.findById(id);
+
+  if (!client) {
+    throw new NotFound('Client not found');
+  }
+
+  if (!client.subdomain) {
+    res.status(400).json({ success: false, message: 'Client has no subdomain' });
+    return;
+  }
+
+  try {
+    const path = require('path');
+    const PLESK_VHOSTS_DIR = process.env.PLESK_VHOSTS_DIR || '/var/www/vhosts/systego.net/subdomains';
+    const backendDestDir = path.join(PLESK_VHOSTS_DIR, `api-${client.subdomain}`);
+    const frontendUrl = `${client.subdomain}.systego.net`;
+    const dbName = `sc_${client._id}`;
+
+    // Regenerate the .env file with corrected line endings
+    await generateBackendEnv(backendDestDir, client.subdomain, frontendUrl, {
+      dbName,
+      dbUser: 'SystegoSuper',
+      dbPass: 'XEjjaEHrFQwKWrXV'
+    });
+
+    // Restart the Node.js app to pick up new env
+    const apiSubdomain = `api-${client.subdomain}.systego.net`;
+    await executePleskCli('extension', ['--call', 'nodejs', '--disable', '-domain', apiSubdomain]);
+    await executePleskCli('extension', ['--call', 'nodejs', '--enable', '-domain', apiSubdomain]);
+
+    return SuccessResponse(res, { message: 'Backend .env regenerated and app restarted successfully' }, 200);
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to regenerate .env', error: error.message });
+  }
+});
 
 export const select = asyncHandler(async (req, res) => {
   const packages = await PackageModel.find()

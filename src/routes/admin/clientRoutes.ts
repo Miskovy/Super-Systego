@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import {
     getAllClients, getClientById, createClient,
-    updateClient, deleteClient, select, rebuildClientFrontend, deployClientBackend
+    updateClient, deleteClient, select, rebuildClientFrontend, deployClientBackend, regenerateClientEnv
 } from '../../controller/admin/ClientController';
 import { createClientValidator, updateClientValidator } from '../../validation/admin/clientValidator';
 import { validate } from '../../middlewares/validation';
@@ -19,6 +19,7 @@ router.put('/:id', validate(updateClientValidator), updateClient);
 router.delete('/:id', deleteClient);
 router.post('/:id/rebuild-frontend', rebuildClientFrontend);
 router.post('/:id/deploy-backend', deployClientBackend);
+router.post('/:id/regenerate-env', regenerateClientEnv);
 
 export default router;
 

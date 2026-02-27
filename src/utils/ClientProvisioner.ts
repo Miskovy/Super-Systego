@@ -131,7 +131,7 @@ async function copyDirectory(src: string, dest: string) {
 /**
  * Helper: Generates the specialized .env file for the client's backend
  */
-async function generateBackendEnv(
+export async function generateBackendEnv(
     destDir: string,
     clientName: string,
     frontendUrl: string,
