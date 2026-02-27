@@ -391,7 +391,7 @@ export async function deployBackendForClient(clientName: string, backendSubdomai
 
         // 3. Disables Nginx Proxy Mode
         console.log(`[Provisioning] Disabling Nginx proxy mode...`);
-        await executePleskCli('site', ['--update', backendSubdomainUrl, '-nginx-proxy-mode', 'false']);
+        await executePleskCli('domain', ['--update-web-server-settings', backendSubdomainUrl, '-nginx-proxy-mode', 'false']);
 
         // 4. Installs Production NPM dependencies
         console.log(`[Provisioning] Installing NPM dependencies for backend...`);
