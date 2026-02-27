@@ -384,12 +384,21 @@ export async function deployBackendForClient(clientName: string, backendSubdomai
         console.log(`[Provisioning] Enabling Node.js extension...`);
         await executePleskCli('extension', ['--call', 'nodejs', '--enable', '-domain', backendSubdomainUrl]);
 
-        // 2. Generate a root app.js shim to satisfy Plesk's default startup file expectations
+        // 2. Configure the Node.js application root directory
+        // By default Plesk sets the app root to the document root's parent folder.
+        // We MUST point it precisely to the api-client subdomain folder.
+        console.log(`[Provisioning] Configuring Node.js Application Root...`);
+        const relativeAppRoot = `/subdomains/api-${clientName}`;
+        await executePleskCli('extension', [
+            '--call', 'nodejs', '--update',
+            '-domain', backendSubdomainUrl,
+            '-app-root', relativeAppRoot
+        ]);
+
+        // 2.5 Generate a root app.js shim to satisfy Plesk's default startup file expectations
         console.log(`[Provisioning] Generating app.js shim for Plesk default startup...`);
         const appJsPath = path.join(backendDestDir, 'app.js');
         await fs.writeFile(appJsPath, `require('./dist/server.js');\n`, 'utf-8');
-
-        // 3. Disables Nginx Proxy Mode
         console.log(`[Provisioning] Disabling Nginx proxy mode...`);
         await executePleskCli('domain', ['--update-web-server-settings', backendSubdomainUrl, '-nginx-proxy-mode', 'false']);
 
