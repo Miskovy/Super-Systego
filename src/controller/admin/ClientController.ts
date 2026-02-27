@@ -269,13 +269,16 @@ export const deployClientBackend = asyncHandler(async (req, res) => {
     res.status(400).json({ success: false, message: 'Client has no subdomain' });
     return;
   }
-
   try {
-    const result = await deployBackendForClient(client.subdomain);
-    return SuccessResponse(res, {
-      message: 'Backend deployed. Check diagnostics for CLI discovery.',
-      ...result
-    }, 200);
+    const path = require('path');
+    const PLESK_VHOSTS_DIR = process.env.PLESK_VHOSTS_DIR || '/var/www/vhosts/systego.net/subdomains';
+    const backendDestDir = path.join(PLESK_VHOSTS_DIR, `api-${client.subdomain}`);
+    const backendSubdomainUrl = `api-${client.subdomain}.systego.net`;
+
+    // This process takes time to run npm install and configure Plesk
+    await deployBackendForClient(client.subdomain, backendSubdomainUrl, backendDestDir);
+
+    return SuccessResponse(res, { message: 'Backend Node.js application deployed and restarted successfully' }, 200);
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to deploy backend on Plesk', error: error.message });
   }
