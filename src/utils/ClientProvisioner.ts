@@ -389,21 +389,19 @@ export async function deployBackendForClient(clientName: string) {
         console.log(`[Provisioning] Enabling Node.js Extension for ${apiSubdomain}...`);
         await executePleskCli('extension', ['--call', 'nodejs', '--enable', '-domain', apiSubdomain]);
 
-        // 2. PROBE: Find Node.js related tables in the Plesk database
-        const dbProbes = [
-            "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'psa' AND TABLE_NAME LIKE '%node%'",
-            "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'psa' AND TABLE_NAME LIKE '%nodejs%'",
-            "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'psa' AND TABLE_NAME LIKE '%passenger%'",
-            // The domain ID from site --info was 771, look for any config related to it
+        // 2. PROBE: Find Node.js related tables in the Plesk database (using execAsync, not REST API)
+        const dbQueries = [
+            "SHOW TABLES LIKE '%node%'",
+            "SHOW TABLES LIKE '%nodejs%'",
+            "SHOW TABLES LIKE '%passenger%'",
             `SELECT id, dom_id, www_root FROM hosting WHERE dom_id = (SELECT id FROM domains WHERE name = '${apiSubdomain}')`,
-            // Look for extension-specific key-value pairs
-            "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'psa' AND (TABLE_NAME LIKE '%ext%' OR TABLE_NAME LIKE '%misc%' OR TABLE_NAME LIKE '%param%')",
+            "SHOW TABLES LIKE '%ext%'",
         ];
 
-        for (const query of dbProbes) {
+        for (const query of dbQueries) {
             try {
-                const result = await executePleskCli('db', ['-e', query]);
-                diagnostics.push(`=== DB: ${query.substring(0, 60)}... ===\n` + (result?.stdout || JSON.stringify(result)));
+                const { stdout } = await execAsync(`plesk bin db -e "${query}"`);
+                diagnostics.push(`=== DB: ${query.substring(0, 50)} ===\n${stdout}`);
             } catch (e: any) {
                 diagnostics.push(`DB error [${query.substring(0, 40)}]: ${e.message}`);
             }
