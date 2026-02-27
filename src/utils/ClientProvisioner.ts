@@ -401,7 +401,7 @@ export async function deployBackendForClient(clientName: string, backendSubdomai
         // 4. Generate app.js shim for Plesk default startup
         console.log(`[Provisioning] Generating app.js shim...`);
         const appJsPath = path.join(backendDestDir, 'app.js');
-        await fs.writeFile(appJsPath, `require('./dist/server.js');\n`, 'utf-8');
+        await fs.writeFile(appJsPath, `require('./dist/src/server.js');\n`, 'utf-8');
 
         // 5. Disable Nginx proxy mode (often recommended for Node apps in Plesk)
         console.log(`[Provisioning] Disabling Nginx proxy mode...`);
