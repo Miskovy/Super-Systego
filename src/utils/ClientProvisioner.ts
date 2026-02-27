@@ -385,7 +385,8 @@ export async function deployBackendForClient(clientName: string) {
     try {
         // 1. Enable Node.js Extension via REST API (using --call, NOT --exec)
         console.log(`[Provisioning] Enabling Node.js Extension for ${apiSubdomain}...`);
-        await executePleskCli('extension', ['--call', 'nodejs', '--enable', '-domain', apiSubdomain]);
+        await executePleskCli('extension', ['--call', 'nodejs', '--enable', '-domain', apiSubdomain, '-startup-file', `api-${clientName}/app.js`]);
+
 
         // 2. Create app.js wrapper (Plesk default startup file) that loads our actual entry point
         console.log(`[Provisioning] Creating app.js startup wrapper...`);
@@ -412,11 +413,12 @@ export async function deployBackendForClient(clientName: string) {
         console.log(`[Provisioning] Disabling Nginx Proxy Mode...`);
         await executePleskCli('domain', ['--update-web-server-settings', apiSubdomain, '-nginx-proxy-mode', 'false']);
 
-        // 4. Install NPM Dependencies
-        console.log(`[Provisioning] Installing NPM Production Dependencies in ${destDir}...`);
-        const { stdout: npmOut } = await execAsync(`npm install --production`, {
+        // 4. Clean install NPM Dependencies (remove old node_modules to prevent corruption)
+        console.log(`[Provisioning] Cleaning and installing NPM Production Dependencies in ${destDir}...`);
+        await execAsync(`rm -rf node_modules`, { cwd: destDir }).catch(() => { });
+        const { stdout: npmOut } = await execAsync(`npm install --omit=dev`, {
             cwd: destDir,
-            maxBuffer: 1024 * 1024 * 5
+            maxBuffer: 1024 * 1024 * 10
         });
         console.log(npmOut);
 
