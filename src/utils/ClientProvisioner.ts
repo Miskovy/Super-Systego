@@ -382,12 +382,12 @@ export async function deployBackendForClient(clientName: string, backendSubdomai
     try {
         // 1. Enables Node.js extension for the backend subdomain
         console.log(`[Provisioning] Enabling Node.js extension...`);
-        await executePleskCli('ext', ['nodejs', '--enable', '-domain', backendSubdomainUrl]);
+        await executePleskCli('extension', ['--call', 'nodejs', '--enable', '-domain', backendSubdomainUrl]);
 
         // 2. Sets startup file and app mode
         console.log(`[Provisioning] Configuring Node.js app mode and startup file...`);
-        await executePleskCli('ext', [
-            'nodejs', '--update',
+        await executePleskCli('extension', [
+            '--call', 'nodejs', '--update',
             '-domain', backendSubdomainUrl,
             '-startup-file', 'dist/server.js',
             '-app-mode', 'production'
