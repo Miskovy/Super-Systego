@@ -386,9 +386,10 @@ export async function deployBackendForClient(clientName: string, backendSubdomai
 
         // 2. Sets startup file and app mode
         console.log(`[Provisioning] Configuring Node.js app mode and startup file...`);
-        await executePleskCli('extension', [
-            '--call', 'nodejs', '--update',
-            '-domain', backendSubdomainUrl,
+
+        // Use standard nodejs CLI available in plesk bin instead of extension
+        await executePleskCli('nodejs', [
+            '--update', backendSubdomainUrl,
             '-startup-file', 'dist/server.js',
             '-app-mode', 'production'
         ]);
