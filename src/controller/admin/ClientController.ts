@@ -277,10 +277,8 @@ export const deployClientBackend = asyncHandler(async (req, res) => {
     const backendSubdomainUrl = `api-${client.subdomain}.systego.net`;
 
     // This process takes time to run npm install and configure Plesk
-    // await deployBackendForClient(client.subdomain, backendSubdomainUrl, backendDestDir);
-    const pleskSysUser = await getPleskSystemUser(PLESK_VHOSTS_DIR);
-    console.log(`[Provisioning] Detected Plesk system user: ${pleskSysUser}`);
-    return SuccessResponse(res, { message: 'Backend Node.js application deployed and restarted successfully', data: pleskSysUser }, 200);
+    await deployBackendForClient(client.subdomain, backendSubdomainUrl, backendDestDir);
+    return SuccessResponse(res, { message: 'Backend Node.js application deployed and restarted successfully' }, 200);
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to deploy backend on Plesk', error: error.message });
   }
