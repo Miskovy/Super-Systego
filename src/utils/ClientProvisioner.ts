@@ -389,23 +389,35 @@ export async function deployBackendForClient(clientName: string) {
         console.log(`[Provisioning] Enabling Node.js Extension for ${apiSubdomain}...`);
         await executePleskCli('extension', ['--call', 'nodejs', '--enable', '-domain', apiSubdomain]);
 
-        // 2. PROBE: Find Node.js related tables in the Plesk database (using execAsync, not REST API)
-        const dbQueries = [
-            "SHOW TABLES LIKE '%node%'",
-            "SHOW TABLES LIKE '%nodejs%'",
-            "SHOW TABLES LIKE '%passenger%'",
-            `SELECT id, dom_id, www_root FROM hosting WHERE dom_id = (SELECT id FROM domains WHERE name = '${apiSubdomain}')`,
-            "SHOW TABLES LIKE '%ext%'",
+        // 2. PROBE: Try direct Plesk REST API v2 endpoints (not CLI wrappers)
+        const pleskHost = process.env.PLESK_HOST || 'localhost';
+        const pleskPort = process.env.PLESK_PORT || '8443';
+        const pleskApiKey = process.env.PLESK_API_KEY || '';
+        const https = require('https');
+        const axios = require('axios');
+        const agent = new https.Agent({ rejectUnauthorized: false });
+
+        const apiEndpoints = [
+            { method: 'GET', url: `/api/v2/domains`, desc: 'List domains' },
+            { method: 'GET', url: `/api/v2/cli`, desc: 'List CLI utilities' },
         ];
 
-        for (const query of dbQueries) {
+        for (const ep of apiEndpoints) {
             try {
-                const { stdout } = await execAsync(`plesk bin db -e "${query}"`);
-                diagnostics.push(`=== DB: ${query.substring(0, 50)} ===\n${stdout}`);
+                const resp = await axios({
+                    method: ep.method,
+                    url: `https://${pleskHost}:${pleskPort}${ep.url}`,
+                    headers: { 'X-API-Key': pleskApiKey, 'Accept': 'application/json' },
+                    httpsAgent: agent,
+                });
+                const data = JSON.stringify(resp.data).substring(0, 500);
+                diagnostics.push(`=== ${ep.desc} (${ep.method} ${ep.url}) ===\n${data}`);
             } catch (e: any) {
-                diagnostics.push(`DB error [${query.substring(0, 40)}]: ${e.message}`);
+                const errData = e.response?.data ? JSON.stringify(e.response.data).substring(0, 300) : e.message;
+                diagnostics.push(`${ep.desc} error: ${e.response?.status || 'N/A'} - ${errData}`);
             }
         }
+
 
 
         // 5. Create app.js wrapper
