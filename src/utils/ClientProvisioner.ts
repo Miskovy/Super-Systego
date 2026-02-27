@@ -380,38 +380,42 @@ export async function deployBackendForClient(clientName: string, backendSubdomai
     console.log(`[Provisioning] Deploying Node.js backend for ${backendSubdomainUrl}...`);
 
     try {
-        // 1. Enable Node.js extension for the backend subdomain
+        // 1. Create an empty 'public' folder to act as the Document Root
+        console.log(`[Provisioning] Creating public directory for Document Root...`);
+        const publicDir = path.join(backendDestDir, 'public');
+        await fs.mkdir(publicDir, { recursive: true }).catch(() => { });
+
+        // 2. Trick Plesk into setting the correct App Root by updating the Document Root first.
+        // Plesk natively sets the Node.js App Root to the PARENT folder of the Document Root.
+        console.log(`[Provisioning] Updating Document Root to configure App Root...`);
+        await executePleskCli('site', [
+            '--update', backendSubdomainUrl,
+            '-www-root', `subdomains/api-${clientName}/public` // No leading slash, relative to subscription root
+        ]);
+
+        // 3. Enable Node.js extension for the backend subdomain
+        // Because the doc root is now /public, Plesk automatically sets the App Root to /subdomains/api-client!
         console.log(`[Provisioning] Enabling Node.js extension...`);
         await executePleskCli('extension', ['--call', 'nodejs', '--enable', '-domain', backendSubdomainUrl]);
 
-        // 2. Configure the Node.js Application Root precisely to the api-client subdomain folder
-        console.log(`[Provisioning] Configuring Node.js Application Root...`);
-        const relativeAppRoot = `/subdomains/api-${clientName}`;
-        await executePleskCli('extension', [
-            '--call', 'nodejs', '--update',
-            '-domain', backendSubdomainUrl,
-            '-app-root', relativeAppRoot
-        ]);
-
-        // 3. Generate app.js shim for Plesk default startup
+        // 4. Generate app.js shim for Plesk default startup
         console.log(`[Provisioning] Generating app.js shim...`);
         const appJsPath = path.join(backendDestDir, 'app.js');
-        await fs.writeFile(appJsPath, "import('./dist/server.js');\n", 'utf-8');
+        await fs.writeFile(appJsPath, `require('./dist/server.js');\n`, 'utf-8');
 
-        // 4. Disable Nginx proxy mode (often recommended for Node apps in Plesk)
+        // 5. Disable Nginx proxy mode (often recommended for Node apps in Plesk)
         console.log(`[Provisioning] Disabling Nginx proxy mode...`);
         await executePleskCli('domain', ['--update-web-server-settings', backendSubdomainUrl, '-nginx-proxy-mode', 'false']);
 
-        // 5. Install Production NPM dependencies
+        // 6. Install Production NPM dependencies
         console.log(`[Provisioning] Installing NPM dependencies for backend...`);
         await execAsync('npm install --production', { cwd: backendDestDir });
 
-        // 6. FIX PERMISSIONS: Give ownership back to the Plesk user ('systego')
+        // 7. FIX PERMISSIONS: Give ownership back to the Plesk user
         console.log(`[Provisioning] Fixing file ownership for Plesk Passenger...`);
-        // We use 'systego' as the user and 'psacln' as the Plesk web group
         await execAsync(`chown -R systego:psacln ${backendDestDir}`);
 
-        // 7. Restart the application
+        // 8. Restart the application
         console.log(`[Provisioning] Restarting backend Node.js app...`);
         await triggerNodeRestart(backendDestDir);
 
