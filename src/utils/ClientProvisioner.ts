@@ -44,23 +44,20 @@ export async function provisionNewClient(
 
     console.log(`[Provisioning] Created subdomains: ${frontendSubdomainUrl} & ${backendSubdomainUrl}`);
 
-    // 2. Install free Let's Encrypt SSL certificates for both subdomains (BACKGROUND JOB)
-    // Issuing 2 SSL certificates can take 30-40 seconds. To prevent Plesk Nginx from timing out (502 Bad Gateway at 60s),
-    // we fire this as a non-blocking background task. It waits 10 seconds for the web server to reload, then installs SSL.
-    (async () => {
-        try {
-            console.log(`[Provisioning: Background Job] Waiting 10 seconds for Web Server configuration to reload...`);
-            const { setTimeout } = require('timers/promises');
-            await setTimeout(10000);
+    // 2. Install free Let's Encrypt SSL certificates for both subdomains (DETACHED BACKGROUND PROCESS)
+    // Issuing 2 SSL certificates takes too long (50+ seconds) and hits Nginx timeouts.
+    // If we use an async JS background job, Plesk Passenger suspends the thread as soon as the HTTP request ends.
+    // Therefore, we spawn a completely independent, detached shell process.
+    console.log(`[Provisioning] Spawning detached shell script to install SSL in 10 seconds...`);
+    const { exec } = require('child_process');
+    const adminEmail = process.env.SSL_ADMIN_EMAIL || 'systego.eg@gmail.com';
 
-            console.log(`[Provisioning: Background Job] Installing SSL/TLS certificates...`);
-            await installSslCertificate(frontendSubdomainUrl);
-            await installSslCertificate(backendSubdomainUrl);
-            console.log(`[Provisioning: Background Job] SSL provisioning finished.`);
-        } catch (bgError) {
-            console.error(`[Provisioning: Background Job] Fatal error:`, bgError);
-        }
-    })();
+    // Command: sleep 10s -> issue frontend SSL -> issue backend SSL
+    const bashCommand = `sleep 10 && plesk bin extension --exec letsencrypt cli.php -d ${frontendSubdomainUrl} -m ${adminEmail} && plesk bin extension --exec letsencrypt cli.php -d ${backendSubdomainUrl} -m ${adminEmail}`;
+
+    const child = exec(bashCommand, { detached: true, stdio: 'ignore' });
+    child.unref(); // Disconnect the child process so the Node app can exit/finish without waiting for it
+    console.log(`[Provisioning] Detached SSL process spawned (PID: ${child.pid}).`);
 
     try {
         const frontendDestDir = path.join(PLESK_VHOSTS_DIR, clientName);
