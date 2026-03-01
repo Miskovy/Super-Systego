@@ -469,17 +469,18 @@ export const installClientDependencies = async (req: Request, res: Response) => 
     // 1. IMMEDIATELY return a success response to the frontend so Nginx doesn't timeout!
     res.status(202).json({
         success: true,
-        message: "Dependency installation started in the background. The backend will be live in ~60 seconds."
+        message: "Dependency installation started in the background. The backend will be live shortly."
     });
 
     // 2. Run the heavy lifting asynchronously in the background
-    // Notice we do NOT use 'await' before this async IIFE (Immediately Invoked Function Expression)
     (async () => {
         try {
-            console.log(`[Install Job] Starting npm install for ${clientName}...`);
+            console.log(`[Install Job] Starting background node_modules copy for ${clientName}...`);
 
-            // Run NPM install
-            await execAsync('npm install --production', { cwd: backendDestDir });
+            // --- THE FIX: USE NATIVE LINUX COPY INSTEAD OF NPM INSTALL ---
+            // 'cp -a' cleanly copies the folder, preserving inner symlinks.
+            const masterNodeModules = '/var/www/vhosts/systego.net/master-builds/backend-latest/node_modules';
+            await execAsync(`cp -a ${masterNodeModules} ${backendDestDir}/`);
 
             console.log(`[Install Job] Fixing Plesk file ownership...`);
             // CRITICAL: Give ownership back to Plesk so Passenger doesn't crash!
@@ -496,12 +497,8 @@ export const installClientDependencies = async (req: Request, res: Response) => 
 
             console.log(`[Install Job] ✅ Backend for ${clientName} is now fully live!`);
 
-            // Optional: If you have a database connection here, you can update the ClientModel 
-            // status from "provisioning" to "active" so the frontend knows it's done!
-
         } catch (error: any) {
-            console.error(`[Install Job] ❌ Failed to install dependencies for ${clientName}:`, error.message);
-            // Optional: Update ClientModel status to "failed"
+            console.error(`[Install Job] ❌ Failed to copy dependencies for ${clientName}:`, error.message);
         }
     })();
 };
