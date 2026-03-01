@@ -44,15 +44,23 @@ export async function provisionNewClient(
 
     console.log(`[Provisioning] Created subdomains: ${frontendSubdomainUrl} & ${backendSubdomainUrl}`);
 
-    // Wait 5 seconds to let Plesk fully reload Apache/Nginx configurations for the new subdomains
-    console.log(`[Provisioning] Waiting 5 seconds for Web Server configuration to reload...`);
-    const { setTimeout } = require('timers/promises');
-    await setTimeout(5000);
+    // 2. Install free Let's Encrypt SSL certificates for both subdomains (BACKGROUND JOB)
+    // Issuing 2 SSL certificates can take 30-40 seconds. To prevent Plesk Nginx from timing out (502 Bad Gateway at 60s),
+    // we fire this as a non-blocking background task. It waits 10 seconds for the web server to reload, then installs SSL.
+    (async () => {
+        try {
+            console.log(`[Provisioning: Background Job] Waiting 10 seconds for Web Server configuration to reload...`);
+            const { setTimeout } = require('timers/promises');
+            await setTimeout(10000);
 
-    // 2. Install free Let's Encrypt SSL certificates for both subdomains
-    console.log(`[Provisioning] Installing SSL/TLS certificates...`);
-    await installSslCertificate(frontendSubdomainUrl);
-    await installSslCertificate(backendSubdomainUrl);
+            console.log(`[Provisioning: Background Job] Installing SSL/TLS certificates...`);
+            await installSslCertificate(frontendSubdomainUrl);
+            await installSslCertificate(backendSubdomainUrl);
+            console.log(`[Provisioning: Background Job] SSL provisioning finished.`);
+        } catch (bgError) {
+            console.error(`[Provisioning: Background Job] Fatal error:`, bgError);
+        }
+    })();
 
     try {
         const frontendDestDir = path.join(PLESK_VHOSTS_DIR, clientName);
