@@ -394,10 +394,9 @@ export async function deployBackendForClient(clientName: string, backendSubdomai
             '-www-root', `subdomains/api-${clientName}/public` // No leading slash, relative to subscription root
         ]);
 
-        // 3. Enable Node.js extension for the backend subdomain
-        // Because the doc root is now /public, Plesk automatically sets the App Root to /subdomains/api-client!
-        console.log(`[Provisioning] Enabling Node.js extension...`);
-        await executePleskCli('extension', ['--call', 'nodejs', '--enable', '-domain', backendSubdomainUrl]);
+        // 3. DO NOT enable Node.js here! node_modules don't exist yet.
+        // Enabling causes Passenger to immediately try to boot the app, which crashes.
+        // Node.js will be enabled in the "Install Dependencies" step AFTER node_modules are in place.
 
         // 4. Generate app.js shim for Plesk default startup
         console.log(`[Provisioning] Generating app.js shim...`);
@@ -484,11 +483,10 @@ export const installClientDependencies = async (req: Request, res: Response) => 
             // CRITICAL: Give ownership back to Plesk so Passenger doesn't crash!
             await execAsync(`chown -R systego:psacln ${backendDestDir}`);
 
-            // HARD restart via Plesk CLI — a soft restart (tmp/restart.txt) is unreliable
-            // if Passenger previously cached a failed state from a missing node_modules.
-            console.log(`[Install Job] Hard-restarting Node.js app via Plesk CLI...`);
+            // NOW enable Node.js for the first time — node_modules are in place,
+            // so Passenger will boot the app successfully.
+            console.log(`[Install Job] Enabling Node.js extension via Plesk CLI...`);
             const apiSubdomain = `api-${clientName}.systego.net`;
-            await executePleskCli('extension', ['--call', 'nodejs', '--disable', '-domain', apiSubdomain]);
             await executePleskCli('extension', ['--call', 'nodejs', '--enable', '-domain', apiSubdomain]);
 
             console.log(`[Install Job] ✅ Backend for ${clientName} is now fully live!`);
