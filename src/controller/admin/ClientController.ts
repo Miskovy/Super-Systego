@@ -335,3 +335,51 @@ export const select = asyncHandler(async (req, res) => {
 
   return SuccessResponse(res, { message: 'Packages retrieved successfully', data: packages }, 200);
 });
+
+export const installClientSsl = asyncHandler(async (req, res) => {
+  const id = req.params.id;
+  const client = await ClientModel.findById(id);
+
+  if (!client || !client.subdomain) {
+    throw new NotFound('Client or subdomain not found');
+  }
+
+  const frontendSubdomainUrl = `${client.subdomain}.systego.net`;
+  const backendSubdomainUrl = `api-${client.subdomain}.systego.net`;
+
+  console.log(`[SSL API] Starting SSL installation for client: ${client.company_name}`);
+
+  try {
+    const { executePleskCli } = require('../../utils/PleskService');
+    const adminEmail = process.env.SSL_ADMIN_EMAIL || 'systego.eg@gmail.com';
+
+    // Wait 10 seconds for Plesk to fully write Apache/Nginx configs if called immediately after creation
+    console.log(`[SSL API] Waiting 10 seconds for Web Server configuration to reload...`);
+    const { setTimeout } = require('timers/promises');
+    await setTimeout(10000);
+
+    console.log(`[SSL API] Installing Let's Encrypt SSL for ${frontendSubdomainUrl}...`);
+    await executePleskCli('extension', [
+      '--exec', 'letsencrypt',
+      'cli.php',
+      '-d', frontendSubdomainUrl,
+      '-m', adminEmail
+    ]);
+
+    console.log(`[SSL API] Installing Let's Encrypt SSL for ${backendSubdomainUrl}...`);
+    await executePleskCli('extension', [
+      '--exec', 'letsencrypt',
+      'cli.php',
+      '-d', backendSubdomainUrl,
+      '-m', adminEmail
+    ]);
+
+    SuccessResponse(res, { message: 'SSL certificates successfully installed' }, 200);
+  } catch (error: any) {
+    console.error('[SSL API] Failed to install SSL:', error);
+    res.status(500).json({
+      success: false,
+      message: `Failed to install SSL certificates: ${error.message}`
+    });
+  }
+});

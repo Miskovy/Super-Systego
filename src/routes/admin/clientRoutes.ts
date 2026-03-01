@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import {
     getAllClients, getClientById, createClient,
-    updateClient, deleteClient, select, rebuildClientFrontend, deployClientBackend, regenerateClientEnv
+    updateClient, deleteClient, select, rebuildClientFrontend, deployClientBackend, regenerateClientEnv, installClientSsl
 } from '../../controller/admin/ClientController';
 import { installClientDependencies, diagnoseClient, testSslInstallation } from '../../utils/ClientProvisioner';
 import { createClientValidator, updateClientValidator } from '../../validation/admin/clientValidator';
@@ -21,6 +21,7 @@ router.delete('/:id', deleteClient);
 router.post('/:id/rebuild-frontend', rebuildClientFrontend);
 router.post('/:id/deploy-backend', deployClientBackend);
 router.post('/:id/regenerate-env', regenerateClientEnv);
+router.post('/:id/install-ssl', installClientSsl);
 router.post('/install-dependencies', installClientDependencies);
 router.post('/diagnose', diagnoseClient);
 router.post('/diagnose-ssl', testSslInstallation);
