@@ -44,6 +44,11 @@ export async function provisionNewClient(
 
     console.log(`[Provisioning] Created subdomains: ${frontendSubdomainUrl} & ${backendSubdomainUrl}`);
 
+    // 2. Install free Let's Encrypt SSL certificates for both subdomains
+    console.log(`[Provisioning] Installing SSL/TLS certificates...`);
+    await installSslCertificate(frontendSubdomainUrl);
+    await installSslCertificate(backendSubdomainUrl);
+
     try {
         const frontendDestDir = path.join(PLESK_VHOSTS_DIR, clientName);
         const backendDestDir = path.join(PLESK_VHOSTS_DIR, `api-${clientName}`);
@@ -96,6 +101,26 @@ export async function provisionNewClient(
         // await deleteSubdomain(`api-${clientName}`);
 
         throw error;
+    }
+}
+
+/**
+ * Helper: Installs a free Let's Encrypt SSL certificate for a subdomain via Plesk CLI.
+ * Non-fatal — logs a warning if it fails so provisioning can continue.
+ */
+async function installSslCertificate(subdomainUrl: string) {
+    try {
+        console.log(`[Provisioning] Installing Let's Encrypt SSL for ${subdomainUrl}...`);
+        await executePleskCli('extension', [
+            '--call', 'letsencrypt',
+            'cli.php',
+            '-d', subdomainUrl,
+            '-m', process.env.SSL_ADMIN_EMAIL || 'systego.eg@gmail.com'
+        ]);
+        console.log(`[Provisioning] ✅ SSL certificate installed for ${subdomainUrl}`);
+    } catch (error: any) {
+        console.warn(`[Provisioning] ⚠️ SSL certificate installation failed for ${subdomainUrl}: ${error.message}`);
+        console.warn(`[Provisioning] The site will still work over HTTP. You can manually install SSL later via Plesk.`);
     }
 }
 
