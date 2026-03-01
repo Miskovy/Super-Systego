@@ -210,3 +210,48 @@ export async function enableNodeJsOnDomain(subdomainName: string): Promise<void>
   const response = await sendPleskRequest(xmlPacket);
   parsePleskResponse(response, 'enable node.js');
 }
+
+/**
+ * Execute a Plesk CLI command utilizing the Plesk REST API.
+ * This expertly bypasses the Linux 'sudo' restriction by submitting commands
+ * directly to the authenticated internal Plesk system.
+ * 
+ * @param utility - The CLI utility name (e.g., 'nodejs' or 'domain')
+ * @param args - Array of string arguments to pass to the utility
+ */
+export async function executePleskCli(utility: string, args: string[]): Promise<any> {
+    const { host, port, apiKey } = getPleskConfig();
+    const apiUrl = `https://${host}:${port}/api/v2/cli/${utility}/call`;
+
+    if (!apiKey) {
+        throw new Error('PLESK_API_KEY is not configured in .env');
+    }
+
+    console.log(`[Plesk API] Executing CLI command via REST: plesk bin ${utility} ${args.join(' ')}`);
+
+    try {
+        const response = await axios.post(apiUrl, { params: args }, {
+            headers: {
+                'Content-Type': 'application/json',
+                'X-API-Key': apiKey,
+                'Accept': 'application/json'
+            },
+            httpsAgent: httpsAgent,
+        } as any);
+
+        const data = response.data as any;
+
+        // Even if HTTP is 200 OK, the internal command might have failed (code != 0)
+        if (data && data.code !== 0) {
+            console.warn(`[Plesk API Warning] Command returned code ${data.code}. Stderr: ${data.stderr}`);
+            throw new Error(`Command failed with code ${data.code}: ${data.stderr || data.stdout}`);
+        }
+
+        return data;
+    } catch (error: any) {
+        const message = error.response?.data?.message || error.message;
+        const stderr = error.response?.data?.stderr || '';
+        console.error(`[Plesk REST API Error] Failed to execute ${utility}: ${message}. Stderr: ${stderr}`);
+        throw new Error(`Plesk CLI execution failed: ${message} - ${stderr}`);
+    }
+}

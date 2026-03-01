@@ -1,10 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { exec } from 'child_process';
-import util from 'util';
-import { createSubdomain, deleteSubdomain, enableNodeJsOnDomain } from './PleskService';
-
-const execPromise = util.promisify(exec);
+import { createSubdomain, deleteSubdomain } from './PleskService';
 
 // ============================================================================
 // Configuration
@@ -60,8 +56,13 @@ export async function provisionNewClient(
         // 4. Create the necessary .htaccess for the React frontend
         await generateFrontendHtaccess(frontendDestDir);
 
-        // 4.5. Generate client-specific .env file for the React frontend
+        // 4.5. Generate client-specific .env file for the React frontend (fallback)
         await generateFrontendEnv(frontendDestDir, backendSubdomainUrl);
+
+        // 4.6. INJECT the API URL directly into the compiled Vite bundles!
+        console.log(`[Provisioning] Injecting dynamic API URLs into React bundles...`);
+        await injectApiUrlIntoBundle(frontendDestDir, `https://${backendSubdomainUrl}/api`);
+
 
         // 5. Copy Backend template (Node.js TypeScript dist folder)
         console.log(`[Provisioning] Copying backend files to ${backendDestDir}`);
@@ -147,7 +148,7 @@ async function copyDirectory(src: string, dest: string) {
 /**
  * Helper: Generates the specialized .env file for the client's backend
  */
-async function generateBackendEnv(
+export async function generateBackendEnv(
     destDir: string,
     clientName: string,
     frontendUrl: string,
@@ -226,7 +227,8 @@ SSZp2s5zvmcvIGI1rNzab3zbJjwXHx+P00KPIVhcTA==
 SHIFT_REPORT_PASSWORD=123456789
 `.trim();
 
-    await fs.writeFile(envPath, envContent, 'utf-8');
+    // Normalize Windows \r\n to Unix \n before writing — dotenv on Linux needs this for multiline values
+    await fs.writeFile(envPath, envContent.replace(/\r\n/g, '\n'), 'utf-8');
     console.log(`[Provisioning] Wrote backend .env file to ${envPath}`);
 }
 
@@ -291,9 +293,8 @@ async function generateFrontendEnv(destDir: string, backendUrl: string) {
     // Vite injects these variables into the React build at runtime/build-time
     const envContent = `
 # Automatically generated for this specific client instance
-VITE_API_URL=https://${backendUrl}/api
-VITE_APP_BASE_URL=https://${backendUrl}
-    `.trim();
+VITE_API_BASE_URL=https://${backendUrl}
+`.trim();
 
     await fs.writeFile(envPath, envContent, 'utf-8');
     console.log(`[Provisioning] Wrote frontend .env file to ${envPath}`);
@@ -352,5 +353,148 @@ async function replaceClientLogo(destDir: string, logoBase64: string) {
         }
     } catch (e: any) {
         console.error(`[Provisioning] Failed to replace custom logo: ${e.message}`);
+    }
+}
+
+/**
+ * Helper: Recursively scans a directory and replaces the old API URL with the new one 
+ * directly inside the pre-compiled JS and HTML files.
+ */
+async function injectApiUrlIntoBundle(dirPath: string, newApiUrl: string) {
+    const oldUrlBase = 'https://bcknd.systego.net';
+
+    // Some React apps might use /api appended, some might not. 
+    // It's safest to just replace the base domain globally.
+
+    async function scanAndReplace(currentDir: string) {
+        const entries = await fs.readdir(currentDir, { withFileTypes: true });
+
+        for (const entry of entries) {
+            const fullPath = path.join(currentDir, entry.name);
+
+            if (entry.isDirectory()) {
+                await scanAndReplace(fullPath);
+            } else if (entry.isFile() && (entry.name.endsWith('.js') || entry.name.endsWith('.html') || entry.name.endsWith('.json'))) {
+                try {
+                    let content = await fs.readFile(fullPath, 'utf8');
+
+                    if (content.includes(oldUrlBase)) {
+                        // Replace all occurrences globally
+                        // Use a global regex to catch every instance
+                        const regex = new RegExp(oldUrlBase.replace(/[.*/+?^${}()|[\]\\]/g, '\\$&'), 'g');
+                        content = content.replace(regex, newApiUrl);
+
+                        await fs.writeFile(fullPath, content, 'utf8');
+                        console.log(`[Provisioning] Injected new API URL into: ${entry.name}`);
+                    }
+                } catch (err: any) {
+                    console.warn(`[Provisioning] Skipping file ${entry.name} during injection: ${err.message}`);
+                }
+            }
+        }
+    }
+
+    await scanAndReplace(dirPath);
+    console.log(`[Provisioning] Finished injecting ${newApiUrl} into compiled React bundles.`);
+}
+
+/**
+ * Helper: Rebuilds the frontend by client name
+ */
+export async function rebuildFrontendForClient(clientName: string) {
+    const destDir = path.join(PLESK_VHOSTS_DIR, clientName);
+    const apiSubdomain = `https://api-${clientName}.systego.net`;
+    return rebuildFrontend(destDir, apiSubdomain);
+}
+
+/**
+ * Helper: Injects the new URL without reinstalling frontend dependencies
+ */
+export async function rebuildFrontend(destDir: string, apiSubdomain: string) {
+    try {
+        console.log(`[Provisioning] Manually injecting API URL into ${destDir}...`);
+        await injectApiUrlIntoBundle(destDir, apiSubdomain);
+        console.log(`[Provisioning] Frontend URLs explicitly set successfully!`);
+    } catch (err: any) {
+        throw new Error(`Failed to inject frontend URLs: ${err.message}`);
+    }
+}
+
+/**
+ * Automates the Plesk Node.js Backend deployment process exactly as you would do manually.
+ * 
+ * 1. Enables Node.js extension for the backend subdomain
+ * 2. Sets startup file and app mode
+ * 3. Disables Nginx Proxy Mode
+ * 4. Installs Production NPM dependencies
+ * 5. Restarts the application
+ */
+export async function deployBackendForClient(clientName: string, backendSubdomainUrl: string, backendDestDir: string) {
+    console.log(`[Provisioning] Deploying Node.js backend for ${backendSubdomainUrl}...`);
+
+    try {
+        // 1. Create an empty 'public' folder to act as the Document Root
+        console.log(`[Provisioning] Creating public directory for Document Root...`);
+        const publicDir = path.join(backendDestDir, 'public');
+        await fs.mkdir(publicDir, { recursive: true }).catch(() => { });
+
+        // 2. Trick Plesk into setting the correct App Root by updating the Document Root first.
+        // Plesk natively sets the Node.js App Root to the PARENT folder of the Document Root.
+        console.log(`[Provisioning] Updating Document Root to configure App Root...`);
+        await executePleskCli('site', [
+            '--update', backendSubdomainUrl,
+            '-www-root', `subdomains/api-${clientName}/public` // No leading slash, relative to subscription root
+        ]);
+
+        // 3. Enable Node.js extension for the backend subdomain
+        // Because the doc root is now /public, Plesk automatically sets the App Root to /subdomains/api-client!
+        console.log(`[Provisioning] Enabling Node.js extension...`);
+        await executePleskCli('extension', ['--call', 'nodejs', '--enable', '-domain', backendSubdomainUrl]);
+
+        // 4. Generate app.js shim for Plesk default startup
+        console.log(`[Provisioning] Generating app.js shim...`);
+        const appJsPath = path.join(backendDestDir, 'app.js');
+        await fs.writeFile(appJsPath, `require('./dist/src/server.js');\n`, 'utf-8');
+
+        // 5. Disable Nginx proxy mode (often recommended for Node apps in Plesk)
+        console.log(`[Provisioning] Disabling Nginx proxy mode...`);
+        await executePleskCli('domain', ['--update-web-server-settings', backendSubdomainUrl, '-nginx-proxy-mode', 'false']);
+
+        // 6. Install Production NPM dependencies
+        console.log(`[Provisioning] Installing NPM dependencies for backend...`);
+        await execAsync('npm install --production', { cwd: backendDestDir });
+
+        // 7. FIX PERMISSIONS: Give ownership back to the Plesk user
+        console.log(`[Provisioning] Fixing file ownership for Plesk Passenger...`);
+        await execAsync(`chown -R systego:psacln ${backendDestDir}`);
+
+        // 8. Restart the application
+        console.log(`[Provisioning] Restarting backend Node.js app...`);
+        await triggerNodeRestart(backendDestDir);
+
+        console.log(`[Provisioning] Backend successfully deployed and started up.`);
+    } catch (error: any) {
+        console.error(`[Provisioning] Error deploying nodejs backend for ${clientName}`, error);
+        throw error;
+    }
+}
+
+/**
+ * Helper: Dynamically fetches the Plesk system user (owner) of the vhosts directory.
+ * This ensures file permissions align perfectly with Phusion Passenger.
+ */
+export async function getPleskSystemUser(vhostsDir: string): Promise<string> {
+    try {
+        // 'stat -c "%U"' returns just the username of the folder's owner
+        const { stdout } = await execAsync(`stat -c "%U" ${vhostsDir}`);
+        const sysUser = stdout.trim();
+
+        if (!sysUser || sysUser === 'root') {
+            throw new Error(`Invalid system user detected: ${sysUser}. Check directory paths.`);
+        }
+
+        return sysUser;
+    } catch (error: any) {
+        throw new Error(`Failed to dynamically fetch Plesk system user: ${error.message}`);
     }
 }
