@@ -93,33 +93,34 @@ export const createClient = asyncHandler(async (req, res) => {
       company_name: client.company_name,
     });
 
-    // 2. Seed the initial Super Admin user so the client can log in
-    await newDbConnection.createCollection('users');
+    // 1. The Admin schema uses the 'users' collection
+    const targetCollection = 'users';
+    await newDbConnection.createCollection(targetCollection);
 
-    // Generate hashed password for the initial admin
-    let initialPasswordHash = password; // fallback
+    let initialPasswordHash = password;
     try {
-      // Assuming bcrypt is used in your system
       const bcrypt = require('bcryptjs');
       const salt = await bcrypt.genSalt(10);
       initialPasswordHash = await bcrypt.hash(password, salt);
     } catch (e) {
-      console.warn("Could not hash password for initial seed, using plain text fallback.", e);
+      console.warn("Could not hash password for initial seed", e);
     }
 
-    await newDbConnection.collection('users').insertOne({
-      username: 'admin', // Default username
-      email: email,      // The email they registered with
-      password_hash: initialPasswordHash,
-      company_name: company_name,
-      role: 'superadmin',
-      status: 'active',
-      permissions: [],
+    // 2. Match the Admin Schema keys perfectly
+    await newDbConnection.collection(targetCollection).insertOne({
+      username: 'admin',                 // Required by Admin Schema
+      email: email,                      // Required by Admin Schema
+      password_hash: initialPasswordHash,// Admin Schema uses password_hash
+      company_name: company_name,        // Optional in Admin Schema
+      phone: "0000000000",               // Ensure this matches any frontend requirements
+      role: 'superadmin',                // Admin Schema enum
+      status: 'active',                  // Admin Schema enum
+      permissions: [],                   // Default empty permissions array
       createdAt: new Date(),
       updatedAt: new Date()
     });
 
-    console.log(`Database ${dbName} created via useDb and seeded with initial superadmin`);
+    console.log(`Database ${dbName} created and seeded with compliant superadmin`);
   } catch (error: any) {
     console.error('Failed to create client database:', error);
     // Rollback: delete the client record
