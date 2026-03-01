@@ -167,7 +167,12 @@ export const createClient = asyncHandler(async (req, res) => {
   // You might want to add client.backend_url = backendApiUrl; in your schema future
   await client.save();
 
-  return SuccessResponse(res, { message: 'Client created successfully', data: client }, 201);
+  // Strip sensitive info before returning
+  const clientResponse = client.toObject() as any;
+  delete clientResponse.admin_password;
+  delete clientResponse.password;
+
+  return SuccessResponse(res, { message: 'Client created successfully', data: clientResponse }, 201);
 });
 
 export const updateClient = asyncHandler(async (req, res) => {

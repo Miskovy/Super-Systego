@@ -106,17 +106,17 @@ export async function provisionNewClient(
 
 /**
  * Helper: Installs a free Let's Encrypt SSL certificate for a subdomain via Plesk CLI.
- * Uses the SSL It! (sslit) extension which is installed on the Plesk server.
+ * Uses the legacy letsencrypt extension which is installed on the Plesk server.
  * Non-fatal — logs a warning if it fails so provisioning can continue.
  */
 async function installSslCertificate(subdomainUrl: string) {
     try {
         console.log(`[Provisioning] Installing Let's Encrypt SSL for ${subdomainUrl}...`);
         await executePleskCli('extension', [
-            '--exec', 'sslit',
-            '--certificate', '-issue',
-            '-domain', subdomainUrl,
-            '-registrationEmail', process.env.SSL_ADMIN_EMAIL || 'systego.eg@gmail.com'
+            '--exec', 'letsencrypt',
+            'cli.php',
+            '-d', subdomainUrl,
+            '-m', process.env.SSL_ADMIN_EMAIL || 'systego.eg@gmail.com'
         ]);
         console.log(`[Provisioning] ✅ SSL certificate installed for ${subdomainUrl}`);
     } catch (error: any) {
@@ -294,11 +294,11 @@ async function triggerNodeRestart(destDir: string) {
 }
 
 /**
- * Utility: Generate a random string for JWT secret
+ * Utility: Generate a cryptographically secure random string for JWT secret (64 characters hex)
  */
 function generateRandomSecret(): string {
-    return Math.random().toString(36).substring(2, 15) +
-        Math.random().toString(36).substring(2, 15);
+    const crypto = require('crypto');
+    return crypto.randomBytes(32).toString('hex');
 }
 
 /**
