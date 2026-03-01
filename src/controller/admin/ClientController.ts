@@ -137,8 +137,8 @@ export const createClient = asyncHandler(async (req, res) => {
       // Note: In MongoDB Atlas, you typically use a single database user 
       // with access to all databases. We pass the default user from ENV here 
       // if you don't generate separate users per client in Atlas.
-      dbUser: process.env.MONGO_USER || 'systego',
-      dbPass: process.env.MONGO_PASS || 'Systego3030'
+      dbUser: process.env.MONGO_USER || 'SystegoSuper',
+      dbPass: process.env.MONGO_PASS || 'XEjjaEHrFQwKWrXV'
     }, logoBase64);
 
     frontendUrl = provisionResult.frontendUrl;

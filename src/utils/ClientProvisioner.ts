@@ -66,7 +66,7 @@ export async function provisionNewClient(
 
         // 4.6. INJECT the API URL directly into the compiled Vite bundles!
         console.log(`[Provisioning] Injecting dynamic API URLs into React bundles...`);
-        await injectApiUrlIntoBundle(frontendDestDir, `https://${backendSubdomainUrl}/api`);
+        await injectApiUrlIntoBundle(frontendDestDir, `https://${backendSubdomainUrl}`);
 
 
         // 5. Copy Backend template (Node.js TypeScript dist folder)
