@@ -401,36 +401,35 @@ export async function deployBackendForClient(clientName: string, backendSubdomai
         // 4. Generate app.js shim for Plesk default startup (with error logging)
         console.log(`[Provisioning] Generating app.js shim...`);
         const appJsPath = path.join(backendDestDir, 'app.js');
-        const appJsContent = `
-const fs = require('fs');
-const path = require('path');
-const logFile = path.join(__dirname, 'startup-error.log');
-
-// Capture uncaught exceptions
-process.on('uncaughtException', (err) => {
-    const msg = new Date().toISOString() + ' [UNCAUGHT EXCEPTION] ' + err.stack + '\\n';
-    fs.appendFileSync(logFile, msg);
-    console.error(msg);
-    process.exit(1);
-});
-
-// Capture unhandled promise rejections
-process.on('unhandledRejection', (reason) => {
-    const msg = new Date().toISOString() + ' [UNHANDLED REJECTION] ' + String(reason) + '\\n';
-    fs.appendFileSync(logFile, msg);
-    console.error(msg);
-});
-
-try {
-    require('./dist/src/server.js');
-} catch (err) {
-    const msg = new Date().toISOString() + ' [STARTUP CRASH] ' + err.stack + '\\n';
-    fs.appendFileSync(logFile, msg);
-    console.error(msg);
-    process.exit(1);
-}
-`.trim() + '\\n';
-        await fs.writeFile(appJsPath, appJsContent, 'utf-8');
+        const appJsLines = [
+            "const fs = require('fs');",
+            "const path = require('path');",
+            "const logFile = path.join(__dirname, 'startup-error.log');",
+            "",
+            "process.on('uncaughtException', (err) => {",
+            "    const msg = new Date().toISOString() + ' [UNCAUGHT EXCEPTION] ' + err.stack + '\\n';",
+            "    fs.appendFileSync(logFile, msg);",
+            "    console.error(msg);",
+            "    process.exit(1);",
+            "});",
+            "",
+            "process.on('unhandledRejection', (reason) => {",
+            "    const msg = new Date().toISOString() + ' [UNHANDLED REJECTION] ' + String(reason) + '\\n';",
+            "    fs.appendFileSync(logFile, msg);",
+            "    console.error(msg);",
+            "});",
+            "",
+            "try {",
+            "    require('./dist/src/server.js');",
+            "} catch (err) {",
+            "    const msg = new Date().toISOString() + ' [STARTUP CRASH] ' + err.stack + '\\n';",
+            "    fs.appendFileSync(logFile, msg);",
+            "    console.error(msg);",
+            "    process.exit(1);",
+            "}",
+            ""
+        ];
+        await fs.writeFile(appJsPath, appJsLines.join('\n'), 'utf-8');
 
         // 5. Disable Nginx proxy mode (often recommended for Node apps in Plesk)
         console.log(`[Provisioning] Disabling Nginx proxy mode...`);
