@@ -117,7 +117,7 @@ async function copyDirectory(src: string, dest: string) {
             filter: (source) => {
                 const name = path.basename(source);
                 // Do not copy these heavy/unnecessary folders
-                if (['.git', 'tmp', '.vite', 'dist_cache'].includes(name)) {
+                if (['node_modules', '.git', 'tmp', '.vite', 'dist_cache'].includes(name)) {
                     return false;
                 }
                 return true;
@@ -408,8 +408,17 @@ export async function deployBackendForClient(clientName: string, backendSubdomai
         await executePleskCli('domain', ['--update-web-server-settings', backendSubdomainUrl, '-nginx-proxy-mode', 'false']);
 
         // 6. Install Production NPM dependencies
-        console.log(`[Provisioning] Installing NPM dependencies for backend...`);
-        await execAsync('npm install --production', { cwd: backendDestDir });
+        // console.log(`[Provisioning] Installing NPM dependencies for backend...`);
+        // await execAsync('npm install --production', { cwd: backendDestDir });
+
+        // --- NEW SYMLINK LOGIC ---
+        console.log(`[Provisioning] Symlinking node_modules to save time and disk space...`);
+        const masterNodeModules = '/var/www/vhosts/systego.net/master-builds/backend-latest/node_modules';
+        const clientNodeModules = path.join(backendDestDir, 'node_modules');
+
+        // Create a symlink pointing the client's node_modules to the master node_modules
+        await execAsync(`ln -s ${masterNodeModules} ${clientNodeModules}`);
+        // -------------------------
 
         // 7. FIX PERMISSIONS: Give ownership back to the Plesk user
         console.log(`[Provisioning] Fixing file ownership for Plesk Passenger...`);
