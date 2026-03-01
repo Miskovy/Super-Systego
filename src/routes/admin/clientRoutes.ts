@@ -3,7 +3,7 @@ import {
     getAllClients, getClientById, createClient,
     updateClient, deleteClient, select, rebuildClientFrontend, deployClientBackend, regenerateClientEnv
 } from '../../controller/admin/ClientController';
-import { installClientDependencies, diagnoseClient } from '../../utils/ClientProvisioner';
+import { installClientDependencies, diagnoseClient, testSslInstallation } from '../../utils/ClientProvisioner';
 import { createClientValidator, updateClientValidator } from '../../validation/admin/clientValidator';
 import { validate } from '../../middlewares/validation';
 import { authenticated } from '../../middlewares/authenticated';
@@ -23,6 +23,7 @@ router.post('/:id/deploy-backend', deployClientBackend);
 router.post('/:id/regenerate-env', regenerateClientEnv);
 router.post('/install-dependencies', installClientDependencies);
 router.post('/diagnose', diagnoseClient);
+router.post('/diagnose-ssl', testSslInstallation);
 
 export default router;
 

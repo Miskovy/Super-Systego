@@ -632,3 +632,57 @@ export const diagnoseClient = async (req: Request, res: Response) => {
         return res.status(500).json({ success: false, message: error.message });
     }
 };
+
+/**
+ * Endpoint to manually test SSL installation and capture the exact raw error from Plesk.
+ */
+export const testSslInstallation = async (req: Request, res: Response) => {
+    const { subdomainUrl } = req.body;
+
+    if (!subdomainUrl) {
+        return res.status(400).json({ success: false, message: "subdomainUrl is required (e.g. kars.systego.net)" });
+    }
+
+    try {
+        console.log(`[SSL Test] Attempting to install Let's Encrypt SSL for ${subdomainUrl}...`);
+
+        // Let's try the modern sslit extension command first
+        const sslitResult = await executePleskCli('extension', [
+            '--call', 'sslit',
+            '--letsencrypt-install',
+            '-domain', subdomainUrl,
+            '-registrationEmail', process.env.SSL_ADMIN_EMAIL || 'systego.eg@gmail.com'
+        ]);
+
+        return res.json({
+            success: true,
+            message: `SSL installed successfully on ${subdomainUrl} via sslit`,
+            rawResult: sslitResult
+        });
+    } catch (error: any) {
+        // Fallback to the older letsencrypt extension command if sslit fails
+        console.warn(`[SSL Test] sslit failed: ${error.message}. Trying legacy letsencrypt command...`);
+
+        try {
+            const leResult = await executePleskCli('extension', [
+                '--call', 'letsencrypt',
+                'cli.php',
+                '-d', subdomainUrl,
+                '-m', process.env.SSL_ADMIN_EMAIL || 'systego.eg@gmail.com'
+            ]);
+
+            return res.json({
+                success: true,
+                message: `SSL installed successfully on ${subdomainUrl} via legacy letsencrypt`,
+                rawResult: leResult
+            });
+        } catch (leError: any) {
+            return res.status(500).json({
+                success: false,
+                message: "Both SSL installation methods failed",
+                sslitError: error.message,
+                letsencryptError: leError.message
+            });
+        }
+    }
+};
