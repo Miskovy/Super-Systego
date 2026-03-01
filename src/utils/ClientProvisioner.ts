@@ -106,16 +106,17 @@ export async function provisionNewClient(
 
 /**
  * Helper: Installs a free Let's Encrypt SSL certificate for a subdomain via Plesk CLI.
+ * Uses the SSL It! (sslit) extension which is installed on the Plesk server.
  * Non-fatal — logs a warning if it fails so provisioning can continue.
  */
 async function installSslCertificate(subdomainUrl: string) {
     try {
         console.log(`[Provisioning] Installing Let's Encrypt SSL for ${subdomainUrl}...`);
         await executePleskCli('extension', [
-            '--call', 'letsencrypt',
-            'cli.php',
-            '-d', subdomainUrl,
-            '-m', process.env.SSL_ADMIN_EMAIL || 'systego.eg@gmail.com'
+            '--call', 'sslit',
+            '--letsencrypt-install',
+            '-domain', subdomainUrl,
+            '-registrationEmail', process.env.SSL_ADMIN_EMAIL || 'systego.eg@gmail.com'
         ]);
         console.log(`[Provisioning] ✅ SSL certificate installed for ${subdomainUrl}`);
     } catch (error: any) {
