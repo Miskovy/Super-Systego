@@ -425,11 +425,9 @@ export async function deployBackendForClient(clientName: string, backendSubdomai
         console.log(`[Provisioning] Fixing file ownership for Plesk Passenger...`);
         await execAsync(`chown -R systego:psacln ${backendDestDir}`);
 
-        // 8. Restart the application
-        console.log(`[Provisioning] Restarting backend Node.js app...`);
-        await triggerNodeRestart(backendDestDir);
-
-        console.log(`[Provisioning] Backend successfully deployed and started up.`);
+        // 8. DO NOT restart here — node_modules are not installed yet.
+        // The app will be started by the "Install Dependencies" step after copying node_modules.
+        console.log(`[Provisioning] Backend configured. Waiting for dependency installation before starting...`);
     } catch (error: any) {
         console.error(`[Provisioning] Error deploying nodejs backend for ${clientName}`, error);
         throw error;
@@ -486,14 +484,12 @@ export const installClientDependencies = async (req: Request, res: Response) => 
             // CRITICAL: Give ownership back to Plesk so Passenger doesn't crash!
             await execAsync(`chown -R systego:psacln ${backendDestDir}`);
 
-            console.log(`[Install Job] Triggering Passenger restart...`);
-            // Trigger restart by touching tmp/restart.txt
-            const tmpDir = path.join(backendDestDir, 'tmp');
-            await fs.mkdir(tmpDir, { recursive: true }).catch(() => { });
-            const time = new Date();
-            await fs.utimes(path.join(tmpDir, 'restart.txt'), time, time).catch(async () => {
-                await fs.writeFile(path.join(tmpDir, 'restart.txt'), 'restart time: ' + time.toISOString());
-            });
+            // HARD restart via Plesk CLI — a soft restart (tmp/restart.txt) is unreliable
+            // if Passenger previously cached a failed state from a missing node_modules.
+            console.log(`[Install Job] Hard-restarting Node.js app via Plesk CLI...`);
+            const apiSubdomain = `api-${clientName}.systego.net`;
+            await executePleskCli('extension', ['--call', 'nodejs', '--disable', '-domain', apiSubdomain]);
+            await executePleskCli('extension', ['--call', 'nodejs', '--enable', '-domain', apiSubdomain]);
 
             console.log(`[Install Job] ✅ Backend for ${clientName} is now fully live!`);
 
