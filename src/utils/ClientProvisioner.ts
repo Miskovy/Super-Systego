@@ -44,6 +44,11 @@ export async function provisionNewClient(
 
     console.log(`[Provisioning] Created subdomains: ${frontendSubdomainUrl} & ${backendSubdomainUrl}`);
 
+    // Wait 5 seconds to let Plesk fully reload Apache/Nginx configurations for the new subdomains
+    console.log(`[Provisioning] Waiting 5 seconds for Web Server configuration to reload...`);
+    const { setTimeout } = require('timers/promises');
+    await setTimeout(5000);
+
     // 2. Install free Let's Encrypt SSL certificates for both subdomains
     console.log(`[Provisioning] Installing SSL/TLS certificates...`);
     await installSslCertificate(frontendSubdomainUrl);
