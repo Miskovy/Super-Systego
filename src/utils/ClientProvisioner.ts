@@ -398,10 +398,39 @@ export async function deployBackendForClient(clientName: string, backendSubdomai
         // Enabling causes Passenger to immediately try to boot the app, which crashes.
         // Node.js will be enabled in the "Install Dependencies" step AFTER node_modules are in place.
 
-        // 4. Generate app.js shim for Plesk default startup
+        // 4. Generate app.js shim for Plesk default startup (with error logging)
         console.log(`[Provisioning] Generating app.js shim...`);
         const appJsPath = path.join(backendDestDir, 'app.js');
-        await fs.writeFile(appJsPath, `require('./dist/src/server.js');\n`, 'utf-8');
+        const appJsContent = `
+const fs = require('fs');
+const path = require('path');
+const logFile = path.join(__dirname, 'startup-error.log');
+
+// Capture uncaught exceptions
+process.on('uncaughtException', (err) => {
+    const msg = new Date().toISOString() + ' [UNCAUGHT EXCEPTION] ' + err.stack + '\\n';
+    fs.appendFileSync(logFile, msg);
+    console.error(msg);
+    process.exit(1);
+});
+
+// Capture unhandled promise rejections
+process.on('unhandledRejection', (reason) => {
+    const msg = new Date().toISOString() + ' [UNHANDLED REJECTION] ' + String(reason) + '\\n';
+    fs.appendFileSync(logFile, msg);
+    console.error(msg);
+});
+
+try {
+    require('./dist/src/server.js');
+} catch (err) {
+    const msg = new Date().toISOString() + ' [STARTUP CRASH] ' + err.stack + '\\n';
+    fs.appendFileSync(logFile, msg);
+    console.error(msg);
+    process.exit(1);
+}
+`.trim() + '\\n';
+        await fs.writeFile(appJsPath, appJsContent, 'utf-8');
 
         // 5. Disable Nginx proxy mode (often recommended for Node apps in Plesk)
         console.log(`[Provisioning] Disabling Nginx proxy mode...`);
@@ -495,4 +524,86 @@ export const installClientDependencies = async (req: Request, res: Response) => 
             console.error(`[Install Job] ❌ Failed to copy dependencies for ${clientName}:`, error.message);
         }
     })();
+};
+
+/**
+ * Diagnostic endpoint: Reads the startup-error.log and checks key files for a client backend.
+ * Use this to debug "Incomplete response" errors when you don't have terminal access.
+ */
+export const diagnoseClient = async (req: Request, res: Response) => {
+    const { clientName } = req.body;
+
+    if (!clientName) {
+        return res.status(400).json({ success: false, message: "clientName is required" });
+    }
+
+    const PLESK_VHOSTS_DIR = '/var/www/vhosts/systego.net/subdomains';
+    const backendDestDir = path.join(PLESK_VHOSTS_DIR, `api-${clientName}`);
+
+    const diagnostics: Record<string, any> = { clientName, backendDestDir };
+
+    try {
+        // 1. Check if backend directory exists
+        try {
+            await fs.access(backendDestDir);
+            diagnostics.directoryExists = true;
+        } catch {
+            diagnostics.directoryExists = false;
+            return res.json({ success: true, data: diagnostics });
+        }
+
+        // 2. List top-level files/folders
+        try {
+            const entries = await fs.readdir(backendDestDir);
+            diagnostics.contents = entries;
+        } catch (e: any) {
+            diagnostics.contents = `Error: ${e.message}`;
+        }
+
+        // 3. Check key files exist
+        const keyFiles = ['app.js', '.env', 'dist/src/server.js', 'node_modules', 'package.json'];
+        diagnostics.fileChecks = {};
+        for (const file of keyFiles) {
+            try {
+                const stat = await fs.stat(path.join(backendDestDir, file));
+                diagnostics.fileChecks[file] = stat.isDirectory() ? 'directory exists' : `file exists (${stat.size} bytes)`;
+            } catch {
+                diagnostics.fileChecks[file] = 'MISSING';
+            }
+        }
+
+        // 4. Read startup-error.log (the most important bit!)
+        try {
+            const errorLog = await fs.readFile(path.join(backendDestDir, 'startup-error.log'), 'utf-8');
+            diagnostics.startupErrorLog = errorLog;
+        } catch {
+            diagnostics.startupErrorLog = 'No startup-error.log found (app may not have crashed, or app.js shim is old)';
+        }
+
+        // 5. Read the .env (mask sensitive values)
+        try {
+            const envContent = await fs.readFile(path.join(backendDestDir, '.env'), 'utf-8');
+            // Show variable names but mask values for security
+            const maskedEnv = envContent.split('\n').map(line => {
+                if (line.startsWith('#') || !line.includes('=')) return line;
+                const [key] = line.split('=');
+                return `${key}=***`;
+            }).join('\n');
+            diagnostics.envFile = maskedEnv;
+        } catch {
+            diagnostics.envFile = 'MISSING';
+        }
+
+        // 6. Read app.js content
+        try {
+            const appJs = await fs.readFile(path.join(backendDestDir, 'app.js'), 'utf-8');
+            diagnostics.appJsContent = appJs;
+        } catch {
+            diagnostics.appJsContent = 'MISSING';
+        }
+
+        return res.json({ success: true, data: diagnostics });
+    } catch (error: any) {
+        return res.status(500).json({ success: false, message: error.message });
+    }
 };
