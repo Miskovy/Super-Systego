@@ -117,7 +117,7 @@ async function copyDirectory(src: string, dest: string) {
             filter: (source) => {
                 const name = path.basename(source);
                 // Do not copy these heavy/unnecessary folders
-                if (['node_modules', '.git', 'tmp', '.vite', 'dist_cache'].includes(name)) {
+                if (['.git', 'tmp', '.vite', 'dist_cache'].includes(name)) {
                     return false;
                 }
                 return true;
