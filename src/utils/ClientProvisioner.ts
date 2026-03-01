@@ -3,6 +3,7 @@ import path from 'path';
 import { createSubdomain, deleteSubdomain, executePleskCli } from './PleskService';
 import { exec } from 'child_process';
 import util from 'util';
+import { Request, Response } from 'express';
 
 const execAsync = util.promisify(exec);
 
@@ -411,14 +412,14 @@ export async function deployBackendForClient(clientName: string, backendSubdomai
         // console.log(`[Provisioning] Installing NPM dependencies for backend...`);
         // await execAsync('npm install --production', { cwd: backendDestDir });
 
-        // --- NEW SYMLINK LOGIC ---
-        console.log(`[Provisioning] Symlinking node_modules to save time and disk space...`);
-        const masterNodeModules = '/var/www/vhosts/systego.net/master-builds/backend-latest/node_modules';
-        const clientNodeModules = path.join(backendDestDir, 'node_modules');
+        // // --- NEW SYMLINK LOGIC ---
+        // console.log(`[Provisioning] Symlinking node_modules to save time and disk space...`);
+        // const masterNodeModules = '/var/www/vhosts/systego.net/master-builds/backend-latest/node_modules';
+        // const clientNodeModules = path.join(backendDestDir, 'node_modules');
 
-        // Create a symlink pointing the client's node_modules to the master node_modules
-        await execAsync(`ln -s ${masterNodeModules} ${clientNodeModules}`);
-        // -------------------------
+        // // Create a symlink pointing the client's node_modules to the master node_modules
+        // await execAsync(`ln -s ${masterNodeModules} ${clientNodeModules}`);
+        // // -------------------------
 
         // 7. FIX PERMISSIONS: Give ownership back to the Plesk user
         console.log(`[Provisioning] Fixing file ownership for Plesk Passenger...`);
@@ -454,3 +455,53 @@ export async function getPleskSystemUser(vhostsDir: string): Promise<string> {
         throw new Error(`Failed to dynamically fetch Plesk system user: ${error.message}`);
     }
 }
+
+export const installClientDependencies = async (req: Request, res: Response) => {
+    const { clientName } = req.body;
+
+    if (!clientName) {
+        return res.status(400).json({ success: false, message: "clientName is required" });
+    }
+
+    const PLESK_VHOSTS_DIR = '/var/www/vhosts/systego.net/subdomains';
+    const backendDestDir = path.join(PLESK_VHOSTS_DIR, `api-${clientName}`);
+
+    // 1. IMMEDIATELY return a success response to the frontend so Nginx doesn't timeout!
+    res.status(202).json({
+        success: true,
+        message: "Dependency installation started in the background. The backend will be live in ~60 seconds."
+    });
+
+    // 2. Run the heavy lifting asynchronously in the background
+    // Notice we do NOT use 'await' before this async IIFE (Immediately Invoked Function Expression)
+    (async () => {
+        try {
+            console.log(`[Install Job] Starting npm install for ${clientName}...`);
+
+            // Run NPM install
+            await execAsync('npm install --production', { cwd: backendDestDir });
+
+            console.log(`[Install Job] Fixing Plesk file ownership...`);
+            // CRITICAL: Give ownership back to Plesk so Passenger doesn't crash!
+            await execAsync(`chown -R systego:psacln ${backendDestDir}`);
+
+            console.log(`[Install Job] Triggering Passenger restart...`);
+            // Trigger restart by touching tmp/restart.txt
+            const tmpDir = path.join(backendDestDir, 'tmp');
+            await fs.mkdir(tmpDir, { recursive: true }).catch(() => { });
+            const time = new Date();
+            await fs.utimes(path.join(tmpDir, 'restart.txt'), time, time).catch(async () => {
+                await fs.writeFile(path.join(tmpDir, 'restart.txt'), 'restart time: ' + time.toISOString());
+            });
+
+            console.log(`[Install Job] ✅ Backend for ${clientName} is now fully live!`);
+
+            // Optional: If you have a database connection here, you can update the ClientModel 
+            // status from "provisioning" to "active" so the frontend knows it's done!
+
+        } catch (error: any) {
+            console.error(`[Install Job] ❌ Failed to install dependencies for ${clientName}:`, error.message);
+            // Optional: Update ClientModel status to "failed"
+        }
+    })();
+};
