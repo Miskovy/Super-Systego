@@ -15,7 +15,7 @@ import { seedAdminFromEnv } from "./utils/seedAdmin";
 dotenv.config();
 
 const app = express();
-connectDB().then(seedAdminFromEnv).catch(() => {});
+connectDB().then(seedAdminFromEnv).catch(() => { });
 
 app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(cors({ origin: "*" }));
@@ -38,6 +38,11 @@ const io = new Server(server, {
 });
 
 // ربط Socket.IO
+
+// Increase server timeouts for long-running provisioning tasks (5 minutes)
+server.timeout = 300000;
+server.keepAliveTimeout = 300000;
+server.headersTimeout = 301000;
 
 server.listen(3000, () => {
   console.log("Server is running on http://localhost:3000");
