@@ -113,8 +113,8 @@ async function installSslCertificate(subdomainUrl: string) {
     try {
         console.log(`[Provisioning] Installing Let's Encrypt SSL for ${subdomainUrl}...`);
         await executePleskCli('extension', [
-            '--call', 'sslit',
-            '--letsencrypt-install',
+            '--exec', 'sslit',
+            '--certificate', '-issue',
             '-domain', subdomainUrl,
             '-registrationEmail', process.env.SSL_ADMIN_EMAIL || 'systego.eg@gmail.com'
         ]);
@@ -648,8 +648,8 @@ export const testSslInstallation = async (req: Request, res: Response) => {
 
         // Let's try the modern sslit extension command first
         const sslitResult = await executePleskCli('extension', [
-            '--call', 'sslit',
-            '--letsencrypt-install',
+            '--exec', 'sslit',
+            '--certificate', '-issue',
             '-domain', subdomainUrl,
             '-registrationEmail', process.env.SSL_ADMIN_EMAIL || 'systego.eg@gmail.com'
         ]);
@@ -665,7 +665,7 @@ export const testSslInstallation = async (req: Request, res: Response) => {
 
         try {
             const leResult = await executePleskCli('extension', [
-                '--call', 'letsencrypt',
+                '--exec', 'letsencrypt',
                 'cli.php',
                 '-d', subdomainUrl,
                 '-m', process.env.SSL_ADMIN_EMAIL || 'systego.eg@gmail.com'
