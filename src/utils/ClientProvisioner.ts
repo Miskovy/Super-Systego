@@ -1,6 +1,11 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { createSubdomain, deleteSubdomain } from './PleskService';
+import { createSubdomain, deleteSubdomain, executePleskCli } from './PleskService';
+import { exec } from 'child_process';
+import util from 'util';
+import { Request, Response } from 'express';
+
+const execAsync = util.promisify(exec);
 
 // ============================================================================
 // Configuration
@@ -61,7 +66,7 @@ export async function provisionNewClient(
 
         // 4.6. INJECT the API URL directly into the compiled Vite bundles!
         console.log(`[Provisioning] Injecting dynamic API URLs into React bundles...`);
-        await injectApiUrlIntoBundle(frontendDestDir, `https://${backendSubdomainUrl}/api`);
+        await injectApiUrlIntoBundle(frontendDestDir, `https://${backendSubdomainUrl}`);
 
 
         // 5. Copy Backend template (Node.js TypeScript dist folder)
@@ -70,27 +75,6 @@ export async function provisionNewClient(
 
         // 6. Generate client-specific .env file for the Node.js backend
         await generateBackendEnv(backendDestDir, clientName, frontendSubdomainUrl, dbConfig);
-
-        // 6.2 Create Passenger entry point and .htaccess overrides
-        await generatePassengerEntryPoint(backendDestDir);
-        await generateBackendHtaccess(backendDestDir);
-
-        // 6.5 Enable Node.js on the Plesk domain
-        console.log(`[Provisioning] Enabling Node.js extension for api-${clientName}`);
-        await enableNodeJsOnDomain(`api-${clientName}`);
-
-        // 6.6 Run npm install in backend
-        console.log(`[Provisioning] Running npm install in ${backendDestDir}`);
-        try {
-            const { stdout, stderr } = await execPromise('npm install --omit=dev', { cwd: backendDestDir });
-            console.log(`[Provisioning] npm install stdout: ${stdout}`);
-            if (stderr) console.error(`[Provisioning] npm install stderr: ${stderr}`);
-        } catch (npmErr: any) {
-            console.error(`[Provisioning] npm install failed: ${npmErr.message}`);
-            throw new Error(`Failed to install Node.js dependencies: ${npmErr.message}`);
-        }
-
-
 
         // 7. Trigger a restart for the Node.js backend
         // Plesk Passenger restarts the app when a tmp/restart.txt file is touched
@@ -112,6 +96,27 @@ export async function provisionNewClient(
         // await deleteSubdomain(`api-${clientName}`);
 
         throw error;
+    }
+}
+
+/**
+ * Helper: Installs a free Let's Encrypt SSL certificate for a subdomain via Plesk CLI.
+ * Uses the legacy letsencrypt extension which is installed on the Plesk server.
+ * Non-fatal — logs a warning if it fails so provisioning can continue.
+ */
+async function installSslCertificate(subdomainUrl: string) {
+    try {
+        console.log(`[Provisioning] Installing Let's Encrypt SSL for ${subdomainUrl}...`);
+        await executePleskCli('extension', [
+            '--exec', 'letsencrypt',
+            'cli.php',
+            '-d', subdomainUrl,
+            '-m', process.env.SSL_ADMIN_EMAIL || 'systego.eg@gmail.com'
+        ]);
+        console.log(`[Provisioning] ✅ SSL certificate installed for ${subdomainUrl}`);
+    } catch (error: any) {
+        console.warn(`[Provisioning] ⚠️ SSL certificate installation failed for ${subdomainUrl}: ${error.message}`);
+        console.warn(`[Provisioning] The site will still work over HTTP. You can manually install SSL later via Plesk.`);
     }
 }
 
@@ -233,42 +238,6 @@ SHIFT_REPORT_PASSWORD=123456789
 }
 
 /**
- * Helper: Generates an entry point file for Phusion Passenger in Plesk.
- * Passenger automatically looks for app.js or server.js in the application root.
- */
-async function generatePassengerEntryPoint(destDir: string) {
-    const entryPath = path.join(destDir, 'app.js');
-    const content = `
-const fs = require('fs');
-try {
-    require('./dist/src/server.js');
-} catch (err) {
-    fs.writeFileSync('./startup_error.log', err.stack || err.toString());
-    console.error("Failed to start Passenger app:", err);
-    process.exit(1);
-}
-`;
-    await fs.writeFile(entryPath, content, 'utf-8');
-    console.log(`[Provisioning] Wrote Passenger entry point to ${entryPath}`);
-}
-
-/**
- * Helper: Generates .htaccess for the Node.js backend to override Passenger settings
- */
-async function generateBackendHtaccess(destDir: string) {
-    const htaccessPath = path.join(destDir, '.htaccess');
-    const content = `
-PassengerNodejs /opt/plesk/node/18/bin/node
-PassengerAppType node
-PassengerStartupFile app.js
-PassengerAppRoot ${destDir}
-    `.trim();
-
-    await fs.writeFile(htaccessPath, content, 'utf-8');
-    console.log(`[Provisioning] Wrote backend .htaccess file to override Passenger to ${htaccessPath}`);
-}
-
-/**
  * Helper: Generates .htaccess for React SPA routing
  */
 async function generateFrontendHtaccess(destDir: string) {
@@ -320,11 +289,11 @@ async function triggerNodeRestart(destDir: string) {
 }
 
 /**
- * Utility: Generate a random string for JWT secret
+ * Utility: Generate a cryptographically secure random string for JWT secret (64 characters hex)
  */
 function generateRandomSecret(): string {
-    return Math.random().toString(36).substring(2, 15) +
-        Math.random().toString(36).substring(2, 15);
+    const crypto = require('crypto');
+    return crypto.randomBytes(32).toString('hex');
 }
 
 /**
@@ -446,33 +415,67 @@ export async function deployBackendForClient(clientName: string, backendSubdomai
             '-www-root', `subdomains/api-${clientName}/public` // No leading slash, relative to subscription root
         ]);
 
-        // 3. Enable Node.js extension for the backend subdomain
-        // Because the doc root is now /public, Plesk automatically sets the App Root to /subdomains/api-client!
-        console.log(`[Provisioning] Enabling Node.js extension...`);
-        await executePleskCli('extension', ['--call', 'nodejs', '--enable', '-domain', backendSubdomainUrl]);
+        // 3. DO NOT enable Node.js here! node_modules don't exist yet.
+        // Enabling causes Passenger to immediately try to boot the app, which crashes.
+        // Node.js will be enabled in the "Install Dependencies" step AFTER node_modules are in place.
 
-        // 4. Generate app.js shim for Plesk default startup
+        // 4. Generate app.js shim for Plesk default startup (with error logging)
         console.log(`[Provisioning] Generating app.js shim...`);
         const appJsPath = path.join(backendDestDir, 'app.js');
-        await fs.writeFile(appJsPath, `require('./dist/src/server.js');\n`, 'utf-8');
+        const appJsLines = [
+            "const fs = require('fs');",
+            "const path = require('path');",
+            "const logFile = path.join(__dirname, 'startup-error.log');",
+            "",
+            "process.on('uncaughtException', (err) => {",
+            "    const msg = new Date().toISOString() + ' [UNCAUGHT EXCEPTION] ' + err.stack + '\\n';",
+            "    fs.appendFileSync(logFile, msg);",
+            "    console.error(msg);",
+            "    process.exit(1);",
+            "});",
+            "",
+            "process.on('unhandledRejection', (reason) => {",
+            "    const msg = new Date().toISOString() + ' [UNHANDLED REJECTION] ' + String(reason) + '\\n';",
+            "    fs.appendFileSync(logFile, msg);",
+            "    console.error(msg);",
+            "});",
+            "",
+            "try {",
+            "    require('./dist/src/server.js');",
+            "} catch (err) {",
+            "    const msg = new Date().toISOString() + ' [STARTUP CRASH] ' + err.stack + '\\n';",
+            "    fs.appendFileSync(logFile, msg);",
+            "    console.error(msg);",
+            "    process.exit(1);",
+            "}",
+            ""
+        ];
+        await fs.writeFile(appJsPath, appJsLines.join('\n'), 'utf-8');
 
         // 5. Disable Nginx proxy mode (often recommended for Node apps in Plesk)
         console.log(`[Provisioning] Disabling Nginx proxy mode...`);
         await executePleskCli('domain', ['--update-web-server-settings', backendSubdomainUrl, '-nginx-proxy-mode', 'false']);
 
         // 6. Install Production NPM dependencies
-        console.log(`[Provisioning] Installing NPM dependencies for backend...`);
-        await execAsync('npm install --production', { cwd: backendDestDir });
+        // console.log(`[Provisioning] Installing NPM dependencies for backend...`);
+        // await execAsync('npm install --production', { cwd: backendDestDir });
+
+        // // --- NEW SYMLINK LOGIC ---
+        // console.log(`[Provisioning] Symlinking node_modules to save time and disk space...`);
+        // const masterNodeModules = '/var/www/vhosts/systego.net/master-builds/backend-latest/node_modules';
+        // const clientNodeModules = path.join(backendDestDir, 'node_modules');
+
+        // // Create a symlink pointing the client's node_modules to the master node_modules
+        // await execAsync(`ln -s ${masterNodeModules} ${clientNodeModules}`);
+        // // -------------------------
 
         // 7. FIX PERMISSIONS: Give ownership back to the Plesk user
         console.log(`[Provisioning] Fixing file ownership for Plesk Passenger...`);
         await execAsync(`chown -R systego:psacln ${backendDestDir}`);
 
-        // 8. Restart the application
-        console.log(`[Provisioning] Restarting backend Node.js app...`);
-        await triggerNodeRestart(backendDestDir);
-
-        console.log(`[Provisioning] Backend successfully deployed and started up.`);
+        // 8. DO NOT restart here — node_modules are not installed yet.
+        // The app will be started by the "Install Dependencies" step after copying node_modules.
+        console.log(`[Provisioning] Backend configured. Waiting for dependency installation before starting...`);
     } catch (error: any) {
         console.error(`[Provisioning] Error deploying nodejs backend for ${clientName}`, error);
         throw error;
@@ -498,3 +501,183 @@ export async function getPleskSystemUser(vhostsDir: string): Promise<string> {
         throw new Error(`Failed to dynamically fetch Plesk system user: ${error.message}`);
     }
 }
+
+export const installClientDependencies = async (req: Request, res: Response) => {
+    const { clientName } = req.body;
+
+    if (!clientName) {
+        return res.status(400).json({ success: false, message: "clientName is required" });
+    }
+
+    const PLESK_VHOSTS_DIR = '/var/www/vhosts/systego.net/subdomains';
+    const backendDestDir = path.join(PLESK_VHOSTS_DIR, `api-${clientName}`);
+
+    // 1. IMMEDIATELY return a success response to the frontend so Nginx doesn't timeout!
+    res.status(202).json({
+        success: true,
+        message: "Dependency installation started in the background. The backend will be live shortly."
+    });
+
+    // 2. Run the heavy lifting asynchronously in the background
+    (async () => {
+        try {
+            console.log(`[Install Job] Starting background node_modules copy for ${clientName}...`);
+
+            // --- THE FIX: USE NATIVE LINUX COPY INSTEAD OF NPM INSTALL ---
+            // 'cp -a' cleanly copies the folder, preserving inner symlinks.
+            const masterNodeModules = '/var/www/vhosts/systego.net/master-builds/backend-latest/node_modules';
+            await execAsync(`cp -a ${masterNodeModules} ${backendDestDir}/`);
+
+            console.log(`[Install Job] Fixing Plesk file ownership...`);
+            // CRITICAL: Give ownership back to Plesk so Passenger doesn't crash!
+            await execAsync(`chown -R systego:psacln ${backendDestDir}`);
+
+            // NOW enable Node.js for the first time — node_modules are in place,
+            // so Passenger will boot the app successfully.
+            console.log(`[Install Job] Enabling Node.js extension via Plesk CLI...`);
+            const apiSubdomain = `api-${clientName}.systego.net`;
+            await executePleskCli('extension', ['--call', 'nodejs', '--enable', '-domain', apiSubdomain]);
+
+            console.log(`[Install Job] ✅ Backend for ${clientName} is now fully live!`);
+
+        } catch (error: any) {
+            console.error(`[Install Job] ❌ Failed to copy dependencies for ${clientName}:`, error.message);
+        }
+    })();
+};
+
+/**
+ * Diagnostic endpoint: Reads the startup-error.log and checks key files for a client backend.
+ * Use this to debug "Incomplete response" errors when you don't have terminal access.
+ */
+export const diagnoseClient = async (req: Request, res: Response) => {
+    const { clientName } = req.body;
+
+    if (!clientName) {
+        return res.status(400).json({ success: false, message: "clientName is required" });
+    }
+
+    const PLESK_VHOSTS_DIR = '/var/www/vhosts/systego.net/subdomains';
+    const backendDestDir = path.join(PLESK_VHOSTS_DIR, `api-${clientName}`);
+
+    const diagnostics: Record<string, any> = { clientName, backendDestDir };
+
+    try {
+        // 1. Check if backend directory exists
+        try {
+            await fs.access(backendDestDir);
+            diagnostics.directoryExists = true;
+        } catch {
+            diagnostics.directoryExists = false;
+            return res.json({ success: true, data: diagnostics });
+        }
+
+        // 2. List top-level files/folders
+        try {
+            const entries = await fs.readdir(backendDestDir);
+            diagnostics.contents = entries;
+        } catch (e: any) {
+            diagnostics.contents = `Error: ${e.message}`;
+        }
+
+        // 3. Check key files exist
+        const keyFiles = ['app.js', '.env', 'dist/src/server.js', 'node_modules', 'package.json'];
+        diagnostics.fileChecks = {};
+        for (const file of keyFiles) {
+            try {
+                const stat = await fs.stat(path.join(backendDestDir, file));
+                diagnostics.fileChecks[file] = stat.isDirectory() ? 'directory exists' : `file exists (${stat.size} bytes)`;
+            } catch {
+                diagnostics.fileChecks[file] = 'MISSING';
+            }
+        }
+
+        // 4. Read startup-error.log (the most important bit!)
+        try {
+            const errorLog = await fs.readFile(path.join(backendDestDir, 'startup-error.log'), 'utf-8');
+            diagnostics.startupErrorLog = errorLog;
+        } catch {
+            diagnostics.startupErrorLog = 'No startup-error.log found (app may not have crashed, or app.js shim is old)';
+        }
+
+        // 5. Read the .env (mask sensitive values)
+        try {
+            const envContent = await fs.readFile(path.join(backendDestDir, '.env'), 'utf-8');
+            // Show variable names but mask values for security
+            const maskedEnv = envContent.split('\n').map(line => {
+                if (line.startsWith('#') || !line.includes('=')) return line;
+                const [key] = line.split('=');
+                return `${key}=***`;
+            }).join('\n');
+            diagnostics.envFile = maskedEnv;
+        } catch {
+            diagnostics.envFile = 'MISSING';
+        }
+
+        // 6. Read app.js content
+        try {
+            const appJs = await fs.readFile(path.join(backendDestDir, 'app.js'), 'utf-8');
+            diagnostics.appJsContent = appJs;
+        } catch {
+            diagnostics.appJsContent = 'MISSING';
+        }
+
+        return res.json({ success: true, data: diagnostics });
+    } catch (error: any) {
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * Endpoint to manually test SSL installation and capture the exact raw error from Plesk.
+ */
+export const testSslInstallation = async (req: Request, res: Response) => {
+    const { subdomainUrl } = req.body;
+
+    if (!subdomainUrl) {
+        return res.status(400).json({ success: false, message: "subdomainUrl is required (e.g. kars.systego.net)" });
+    }
+
+    try {
+        console.log(`[SSL Test] Attempting to install Let's Encrypt SSL for ${subdomainUrl}...`);
+
+        // Let's try the modern sslit extension command first
+        const sslitResult = await executePleskCli('extension', [
+            '--exec', 'sslit',
+            '--certificate', '-issue',
+            '-domain', subdomainUrl,
+            '-registrationEmail', process.env.SSL_ADMIN_EMAIL || 'systego.eg@gmail.com'
+        ]);
+
+        return res.json({
+            success: true,
+            message: `SSL installed successfully on ${subdomainUrl} via sslit`,
+            rawResult: sslitResult
+        });
+    } catch (error: any) {
+        // Fallback to the older letsencrypt extension command if sslit fails
+        console.warn(`[SSL Test] sslit failed: ${error.message}. Trying legacy letsencrypt command...`);
+
+        try {
+            const leResult = await executePleskCli('extension', [
+                '--exec', 'letsencrypt',
+                'cli.php',
+                '-d', subdomainUrl,
+                '-m', process.env.SSL_ADMIN_EMAIL || 'systego.eg@gmail.com'
+            ]);
+
+            return res.json({
+                success: true,
+                message: `SSL installed successfully on ${subdomainUrl} via legacy letsencrypt`,
+                rawResult: leResult
+            });
+        } catch (leError: any) {
+            return res.status(500).json({
+                success: false,
+                message: "Both SSL installation methods failed",
+                sslitError: error.message,
+                letsencryptError: leError.message
+            });
+        }
+    }
+};

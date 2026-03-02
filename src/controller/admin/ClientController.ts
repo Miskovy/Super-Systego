@@ -93,33 +93,34 @@ export const createClient = asyncHandler(async (req, res) => {
       company_name: client.company_name,
     });
 
-    // 2. Seed the initial Super Admin user so the client can log in
-    await newDbConnection.createCollection('users');
+    // 1. The Admin schema uses the 'users' collection
+    const targetCollection = 'users';
+    await newDbConnection.createCollection(targetCollection);
 
-    // Generate hashed password for the initial admin
-    let initialPasswordHash = password; // fallback
+    let initialPasswordHash = password;
     try {
-      // Assuming bcrypt is used in your system
       const bcrypt = require('bcryptjs');
       const salt = await bcrypt.genSalt(10);
       initialPasswordHash = await bcrypt.hash(password, salt);
     } catch (e) {
-      console.warn("Could not hash password for initial seed, using plain text fallback.", e);
+      console.warn("Could not hash password for initial seed", e);
     }
 
-    await newDbConnection.collection('users').insertOne({
-      username: 'admin', // Default username
-      email: email,      // The email they registered with
-      password_hash: initialPasswordHash,
-      company_name: company_name,
-      role: 'superadmin',
-      status: 'active',
-      permissions: [],
+    // 2. Match the Admin Schema keys perfectly
+    await newDbConnection.collection(targetCollection).insertOne({
+      username: 'admin',                 // Required by Admin Schema
+      email: email,                      // Required by Admin Schema
+      password_hash: initialPasswordHash,// Admin Schema uses password_hash
+      company_name: company_name,        // Optional in Admin Schema
+      phone: "0000000000",               // Ensure this matches any frontend requirements
+      role: 'superadmin',                // Admin Schema enum
+      status: 'active',                  // Admin Schema enum
+      permissions: [],                   // Default empty permissions array
       createdAt: new Date(),
       updatedAt: new Date()
     });
 
-    console.log(`Database ${dbName} created via useDb and seeded with initial superadmin`);
+    console.log(`Database ${dbName} created and seeded with compliant superadmin`);
   } catch (error: any) {
     console.error('Failed to create client database:', error);
     // Rollback: delete the client record
@@ -136,8 +137,8 @@ export const createClient = asyncHandler(async (req, res) => {
       // Note: In MongoDB Atlas, you typically use a single database user 
       // with access to all databases. We pass the default user from ENV here 
       // if you don't generate separate users per client in Atlas.
-      dbUser: process.env.MONGO_USER || 'systego',
-      dbPass: process.env.MONGO_PASS || 'Systego3030'
+      dbUser: process.env.MONGO_USER || 'SystegoSuper',
+      dbPass: process.env.MONGO_PASS || 'XEjjaEHrFQwKWrXV'
     }, logoBase64);
 
     frontendUrl = provisionResult.frontendUrl;
@@ -166,7 +167,12 @@ export const createClient = asyncHandler(async (req, res) => {
   // You might want to add client.backend_url = backendApiUrl; in your schema future
   await client.save();
 
-  return SuccessResponse(res, { message: 'Client created successfully', data: client }, 201);
+  // Strip sensitive info before returning
+  const clientResponse = client.toObject() as any;
+  delete clientResponse.admin_password;
+  delete clientResponse.password;
+
+  return SuccessResponse(res, { message: 'Client created successfully', data: clientResponse }, 201);
 });
 
 export const updateClient = asyncHandler(async (req, res) => {
@@ -328,4 +334,52 @@ export const select = asyncHandler(async (req, res) => {
     .sort({ created_at: -1 });
 
   return SuccessResponse(res, { message: 'Packages retrieved successfully', data: packages }, 200);
+});
+
+export const installClientSsl = asyncHandler(async (req, res) => {
+  const id = req.params.id;
+  const client = await ClientModel.findById(id);
+
+  if (!client || !client.subdomain) {
+    throw new NotFound('Client or subdomain not found');
+  }
+
+  const frontendSubdomainUrl = `${client.subdomain}.systego.net`;
+  const backendSubdomainUrl = `api-${client.subdomain}.systego.net`;
+
+  console.log(`[SSL API] Starting SSL installation for client: ${client.company_name}`);
+
+  try {
+    const { executePleskCli } = require('../../utils/PleskService');
+    const adminEmail = process.env.SSL_ADMIN_EMAIL || 'systego.eg@gmail.com';
+
+    // Wait 10 seconds for Plesk to fully write Apache/Nginx configs if called immediately after creation
+    console.log(`[SSL API] Waiting 10 seconds for Web Server configuration to reload...`);
+    const { setTimeout } = require('timers/promises');
+    await setTimeout(10000);
+
+    console.log(`[SSL API] Installing Let's Encrypt SSL for ${frontendSubdomainUrl}...`);
+    await executePleskCli('extension', [
+      '--exec', 'letsencrypt',
+      'cli.php',
+      '-d', frontendSubdomainUrl,
+      '-m', adminEmail
+    ]);
+
+    console.log(`[SSL API] Installing Let's Encrypt SSL for ${backendSubdomainUrl}...`);
+    await executePleskCli('extension', [
+      '--exec', 'letsencrypt',
+      'cli.php',
+      '-d', backendSubdomainUrl,
+      '-m', adminEmail
+    ]);
+
+    SuccessResponse(res, { message: 'SSL certificates successfully installed' }, 200);
+  } catch (error: any) {
+    console.error('[SSL API] Failed to install SSL:', error);
+    res.status(500).json({
+      success: false,
+      message: `Failed to install SSL certificates: ${error.message}`
+    });
+  }
 });

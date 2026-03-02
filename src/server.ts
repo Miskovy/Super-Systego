@@ -39,7 +39,11 @@ const io = new Server(server, {
 
 // ربط Socket.IO
 
-const port = process.env.PORT || 3000;
-server.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
+// Increase server timeouts for long-running provisioning tasks (5 minutes)
+server.timeout = 300000;
+server.keepAliveTimeout = 300000;
+server.headersTimeout = 301000;
+
+server.listen(3000, () => {
+  console.log("Server is running on http://localhost:3000");
 });
