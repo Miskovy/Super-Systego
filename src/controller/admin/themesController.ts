@@ -1,4 +1,4 @@
-import { ThemeModel } from '../../models/shema/auth/Theme';
+import { ThemeModel } from '../../models/schema/auth/Theme';
 import asyncHandler from 'express-async-handler';
 import { NotFound } from '../../Errors/NotFound';
 import { SuccessResponse } from '../../utils/response';
@@ -23,7 +23,7 @@ export const getThemeById = asyncHandler(async (req, res) => {
 
 export const createTheme = asyncHandler(async (req, res) => {
   const { name, description, theme } = req.body;
-  
+
   const newTheme = await ThemeModel.create({
     name,
     description,

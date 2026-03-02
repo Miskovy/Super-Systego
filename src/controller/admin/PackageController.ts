@@ -1,12 +1,12 @@
 import { Request, Response } from "express";
-import { PackageModel } from "../../models/shema/auth/Package";
+import { PackageModel } from "../../models/schema/auth/Package";
 import { NotFound, UnauthorizedError } from "../../Errors";
 import { SuccessResponse } from "../../utils/response";
 
 
 export const view = async (req: Request, res: Response) => {
   const packages = await PackageModel.find();
-  
+
   return SuccessResponse(res, { data: packages }, 200);
 };
 
@@ -21,35 +21,35 @@ export const getById = async (req: Request, res: Response) => {
 }
 
 export const create = async (req: Request, res: Response) => {
-    const {
-        name,
-        description,
-        monthly_price,
-        quarterly_price,
-        half_yearly_price,
-        yearly_price,
-        status,
-    } = req.body; 
+  const {
+    name,
+    description,
+    monthly_price,
+    quarterly_price,
+    half_yearly_price,
+    yearly_price,
+    status,
+  } = req.body;
 
-    const new_package = await PackageModel.create({
-        name,
-        description,
-        monthly_price,
-        quarterly_price,
-        half_yearly_price,
-        yearly_price,
-        status,
-    });
+  const new_package = await PackageModel.create({
+    name,
+    description,
+    monthly_price,
+    quarterly_price,
+    half_yearly_price,
+    yearly_price,
+    status,
+  });
   return SuccessResponse(res, { message: 'Package created successfully' }, 201);
 };
 
 export const modify = async (req: Request, res: Response) => {
   const id = req.params.id;
   let package_item = await PackageModel.findById(id);
-  if(!package_item){
+  if (!package_item) {
     throw new UnauthorizedError('Package not found');
   }
-  
+
   const {
     name,
     description,
@@ -76,9 +76,9 @@ export const modify = async (req: Request, res: Response) => {
 export const delete_item = async (req: Request, res: Response) => {
   const id = req.params.id;
   const packages = await PackageModel.findByIdAndDelete(id);
-    if (!packages) {
-      throw new NotFound('package not found');
-    }
-  
-    return SuccessResponse(res, { message: 'package deleted successfully' }, 200);
+  if (!packages) {
+    throw new NotFound('package not found');
+  }
+
+  return SuccessResponse(res, { message: 'package deleted successfully' }, 200);
 };

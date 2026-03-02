@@ -1,9 +1,9 @@
-import { ClientModel } from '../../models/shema/auth/Client';
+import { ClientModel } from '../../models/schema/auth/Client';
 import mongoose from 'mongoose';
 import asyncHandler from 'express-async-handler';
 import { NotFound } from '../../Errors/NotFound';
 import { SuccessResponse } from '../../utils/response';
-import { PackageModel } from '../../models/shema/auth/Package';
+import { PackageModel } from '../../models/schema/auth/Package';
 import { UniqueConstrainError } from '../../Errors';
 import {
   deleteSubdomain,

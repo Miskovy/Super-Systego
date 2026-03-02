@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { AdminModel } from "../../models/shema/auth/Admin";
+import { AdminModel } from "../../models/schema/auth/Admin";
 import { UnauthorizedError } from "../../Errors";
 import { SuccessResponse } from "../../utils/response";
 

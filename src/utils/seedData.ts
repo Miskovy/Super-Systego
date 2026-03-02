@@ -1,10 +1,10 @@
 import mongoose from "mongoose";
 import bcrypt from "bcrypt";
-import { ThemeModel } from "../models/shema/auth/Theme";
-import { PackageModel } from "../models/shema/auth/Package";
-import { PaymentMethodModel } from "../models/shema/auth/PaymentMethod";
-import { CouponModel } from "../models/shema/auth/Coupon";
-import { ClientModel } from "../models/shema/auth/Client";
+import { ThemeModel } from "../models/schema/auth/Theme";
+import { PackageModel } from "../models/schema/auth/Package";
+import { PaymentMethodModel } from "../models/schema/auth/PaymentMethod";
+import { CouponModel } from "../models/schema/auth/Coupon";
+import { ClientModel } from "../models/schema/auth/Client";
 
 export const seedData = async () => {
     console.log("Starting database seeding...");

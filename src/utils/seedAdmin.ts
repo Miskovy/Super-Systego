@@ -1,5 +1,5 @@
 import bcrypt from "bcrypt";
-import { AdminModel } from "../models/shema/auth/Admin";
+import { AdminModel } from "../models/schema/auth/Admin";
 
 export async function seedAdminFromEnv(): Promise<void> {
   const adminEmail = process.env.ADMIN_EMAIL;

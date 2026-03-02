@@ -1,12 +1,12 @@
 import { Request, Response } from "express";
-import { CouponModel } from "../../models/shema/auth/Coupon";
+import { CouponModel } from "../../models/schema/auth/Coupon";
 import { NotFound, UnauthorizedError } from "../../Errors";
 import { SuccessResponse } from "../../utils/response";
 
 
 export const view = async (req: Request, res: Response) => {
   const coupons = await CouponModel.find();
-  
+
   return SuccessResponse(res, { data: coupons }, 200);
 };
 
@@ -21,28 +21,28 @@ export const getCouponById = async (req: Request, res: Response) => {
 }
 
 export const create = async (req: Request, res: Response) => {
-    const {
-        code,
-        discount_type,
-        discount,
-        from,
-        to,
-        status,
-    } = req.body;
-  
-    const coupons = await CouponModel.findOne({ code }).exec();
-    if (coupons) {
-      throw new UnauthorizedError('Code must be unique');
-    }
+  const {
+    code,
+    discount_type,
+    discount,
+    from,
+    to,
+    status,
+  } = req.body;
 
-    const coupon = await CouponModel.create({
-        code,
-        discount_type,
-        discount,
-        from,
-        to,
-        status,
-    });
+  const coupons = await CouponModel.findOne({ code }).exec();
+  if (coupons) {
+    throw new UnauthorizedError('Code must be unique');
+  }
+
+  const coupon = await CouponModel.create({
+    code,
+    discount_type,
+    discount,
+    from,
+    to,
+    status,
+  });
   return SuccessResponse(res, { message: 'Coupon created successfully' }, 201);
 };
 
@@ -80,9 +80,9 @@ export const modify = async (req: Request, res: Response) => {
 export const delete_item = async (req: Request, res: Response) => {
   const id = req.params.id;
   const coupon = await CouponModel.findByIdAndDelete(id);
-    if (!coupon) {
-      throw new NotFound('coupon not found');
-    }
-  
-    return SuccessResponse(res, { message: 'coupon deleted successfully' }, 200);
+  if (!coupon) {
+    throw new NotFound('coupon not found');
+  }
+
+  return SuccessResponse(res, { message: 'coupon deleted successfully' }, 200);
 };

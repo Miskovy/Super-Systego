@@ -1,4 +1,4 @@
-import { PaymentMethodModel } from '../../models/shema/auth/PaymentMethod';
+import { PaymentMethodModel } from '../../models/schema/auth/PaymentMethod';
 import asyncHandler from 'express-async-handler';
 import { NotFound } from '../../Errors/NotFound';
 import { UnauthorizedError } from '../../Errors/unauthorizedError';
