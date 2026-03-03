@@ -383,3 +383,9 @@ export const installClientSsl = asyncHandler(async (req, res) => {
     });
   }
 });
+
+export const view = async (req: Request, res: Response) => {
+  const packages = await PackageModel.find();
+
+  return SuccessResponse(res, { data: packages }, 200);
+};
