@@ -384,8 +384,8 @@ export const installClientSsl = asyncHandler(async (req, res) => {
   }
 });
 
-export const view = async (req: Request, res: Response) => {
+export const viewSelection = asyncHandler(async (req, res) => {
   const packages = await PackageModel.find();
 
-  return SuccessResponse(res, { data: packages }, 200);
-};
+  return SuccessResponse(res, { message: 'Packages retrieved successfully', data: packages }, 200);
+});

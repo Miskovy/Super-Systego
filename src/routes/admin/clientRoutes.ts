@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import {
     getAllClients, getClientById, createClient,
-    updateClient, deleteClient, select, rebuildClientFrontend, deployClientBackend, view, regenerateClientEnv, installClientSsl
+    updateClient, deleteClient, select, rebuildClientFrontend, deployClientBackend, viewSelection, regenerateClientEnv, installClientSsl
 } from '../../controller/admin/ClientController';
 import { installClientDependencies, diagnoseClient, testSslInstallation } from '../../utils/ClientProvisioner';
 import { createClientValidator, updateClientValidator } from '../../validation/admin/clientValidator';
@@ -13,7 +13,7 @@ router.use(authenticated);
 
 
 router.get('/select', select);
-router.get('/view', view);
+router.get('/selectionpackages', viewSelection);
 router.get('/', getAllClients);
 router.get('/:id', getClientById);
 router.post('/', validate(createClientValidator), createClient);
