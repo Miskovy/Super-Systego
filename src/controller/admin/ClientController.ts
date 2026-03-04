@@ -137,8 +137,8 @@ export const createClient = asyncHandler(async (req, res) => {
       // Note: In MongoDB Atlas, you typically use a single database user 
       // with access to all databases. We pass the default user from ENV here 
       // if you don't generate separate users per client in Atlas.
-      dbUser: process.env.MONGO_USER || 'SystegoSuper',
-      dbPass: process.env.MONGO_PASS || 'XEjjaEHrFQwKWrXV'
+      dbUser: process.env.MONGO_USER || 'admin',
+      dbPass: encodeURIComponent(process.env.MONGO_PASS || 'MONGO@3030')
     }, logoBase64);
 
     frontendUrl = provisionResult.frontendUrl;
@@ -313,8 +313,8 @@ export const regenerateClientEnv = asyncHandler(async (req, res) => {
     // Regenerate the .env file with corrected line endings
     await generateBackendEnv(backendDestDir, client.subdomain, frontendUrl, {
       dbName,
-      dbUser: 'SystegoSuper',
-      dbPass: 'XEjjaEHrFQwKWrXV'
+      dbUser: process.env.MONGO_USER || 'admin',
+      dbPass: encodeURIComponent(process.env.MONGO_PASS || 'MONGO@3030')
     });
 
     // Restart the Node.js app to pick up new env

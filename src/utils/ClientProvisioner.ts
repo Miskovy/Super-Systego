@@ -172,7 +172,7 @@ FRONTEND_URL=https://${frontendUrl}
 JWT_SECRET=${generateRandomSecret()}
 
 # MongoDB Configuration
-MongoDB_URI=mongodb+srv://${dbConfig.dbUser}:${dbConfig.dbPass}@supersystego.pl2xvvc.mongodb.net/${dbConfig.dbName}?retryWrites=true&w=majority&appName=SuperSystego
+MongoDB_URI=mongodb://${dbConfig.dbUser}:${dbConfig.dbPass}@127.0.0.1:27017/${dbConfig.dbName}?authSource=admin
 
 # QZ Tray Certificates 
 QZ_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----
