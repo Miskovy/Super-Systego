@@ -206,13 +206,18 @@ export const deleteClient = asyncHandler(async (req, res) => {
     throw new NotFound('Client not found');
   }
 
-  // --- Delete the Plesk subdomain ---
+  // --- Delete the Plesk subdomains ---
   if (client.subdomain) {
     try {
       await deleteSubdomain(client.subdomain);
-      console.log(`Subdomain ${client.subdomain_url} deleted from Plesk`);
+      console.log(`Frontend subdomain ${client.subdomain_url} deleted from Plesk`);
+
+      // Also delete the backend subdomain
+      const backendSubdomain = `api-${client.subdomain}`;
+      await deleteSubdomain(backendSubdomain);
+      console.log(`Backend subdomain ${backendSubdomain}.systego.net deleted from Plesk`);
     } catch (error: any) {
-      console.error('Failed to delete subdomain from Plesk:', error.message);
+      console.error('Failed to delete subdomains from Plesk:', error.message);
       // Continue with client deletion even if subdomain removal fails
       // The admin can manually clean it up in Plesk if needed
     }
