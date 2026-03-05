@@ -236,7 +236,7 @@ export const deleteClient = asyncHandler(async (req, res) => {
   // --- Delete the client record ---
   await ClientModel.findByIdAndDelete(id);
 
-  return SuccessResponse(res, { message: 'Client deleted successfully', data: client }, 200);
+  return SuccessResponse(res, { message: 'Client deleted successfully' }, 200);
 });
 
 export const getClientsByStatus = asyncHandler(async (req, res) => {
