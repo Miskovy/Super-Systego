@@ -171,6 +171,9 @@ NODE_ENV=production
 FRONTEND_URL=https://${frontendUrl}
 JWT_SECRET=${generateRandomSecret()}
 
+VERSION_UPDATER_URL=https://updater.systego.net
+VERSION_UPDATER_API_KEY=${process.env.VERSION_UPDATER_API_KEY}
+
 # MongoDB Configuration
 MongoDB_URI=mongodb://${dbConfig.dbUser}:${dbConfig.dbPass}@127.0.0.1:27017/${dbConfig.dbName}?authSource=admin
 
