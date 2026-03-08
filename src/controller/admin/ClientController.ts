@@ -21,9 +21,12 @@ import { executePleskCli } from '../../utils/PleskService';
 
 export const getAllClients = asyncHandler(async (req, res) => {
   const clients = await ClientModel.find()
-    .select('-password')
+    .select('-password -logoBase64 -admin_password') // Exclude heavy payloads & secrets
     .sort({ created_at: -1 })
-    .populate('package_id');
+    .populate({
+      path: 'package_id',
+      select: 'name price features' // Only get necessary package details
+    });
 
   return SuccessResponse(res, { message: 'Clients retrieved successfully', data: clients }, 200);
 });

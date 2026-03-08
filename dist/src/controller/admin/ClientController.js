@@ -16,9 +16,12 @@ const ClientProvisioner_1 = require("../../utils/ClientProvisioner");
 const PleskService_2 = require("../../utils/PleskService");
 exports.getAllClients = (0, express_async_handler_1.default)(async (req, res) => {
     const clients = await Client_1.ClientModel.find()
-        .select('-password')
+        .select('-password -logoBase64 -admin_password') // Exclude heavy payloads & secrets
         .sort({ created_at: -1 })
-        .populate('package_id');
+        .populate({
+        path: 'package_id',
+        select: 'name price features' // Only get necessary package details
+    });
     return (0, response_1.SuccessResponse)(res, { message: 'Clients retrieved successfully', data: clients }, 200);
 });
 exports.getClientById = (0, express_async_handler_1.default)(async (req, res) => {
