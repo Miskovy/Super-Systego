@@ -9,7 +9,8 @@
     "start": "node dist/src/server.js",
     "generate-db": "npx drizzle-kit generate",
     "migrate-db": "npx drizzle-kit push",
-    "seed": "ts-node src/seed.ts"
+    "seed": "ts-node src/seed.ts",
+    "migrate-logos": "ts-node src/scripts/migrateLogos.ts"
   },
   "keywords": [],
   "author": "",

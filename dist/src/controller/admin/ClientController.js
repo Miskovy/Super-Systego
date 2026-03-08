@@ -30,13 +30,6 @@ exports.getClientById = (0, express_async_handler_1.default)(async (req, res) =>
         throw new NotFound_1.NotFound('Client not found');
     }
     const clientResponse = client.toObject();
-    if (client.subdomain) {
-        const { getClientLogoBase64 } = require('../../utils/ClientProvisioner');
-        const logoBase64 = await getClientLogoBase64(client.subdomain);
-        if (logoBase64) {
-            clientResponse.logoBase64 = logoBase64;
-        }
-    }
     return (0, response_1.SuccessResponse)(res, { message: 'Client retrieved successfully', data: clientResponse }, 200);
 });
 exports.createClient = (0, express_async_handler_1.default)(async (req, res) => {
@@ -70,6 +63,7 @@ exports.createClient = (0, express_async_handler_1.default)(async (req, res) => 
         status,
         package_id,
         subdomain: sanitizedSubdomain,
+        logoBase64,
     });
     const dbName = `sc_${client._id}`;
     // --- Create the client's MongoDB database ---
@@ -169,7 +163,7 @@ exports.updateClient = (0, express_async_handler_1.default)(async (req, res) => 
     let logoBase64 = null;
     if (updateData.logoBase64) {
         logoBase64 = updateData.logoBase64;
-        delete updateData.logoBase64;
+        // We do NOT delete it from updateData because we want it updated in the DB
     }
     const client = await Client_1.ClientModel.findOneAndUpdate({ _id: id }, updateData, { new: true, runValidators: true }).select('-password').populate('package_id');
     if (!client) {

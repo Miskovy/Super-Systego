@@ -16,6 +16,7 @@ const ClientSchema = new mongoose_1.Schema({
     db_name: { type: String },
     subdomain: { type: String, unique: true, sparse: true },
     subdomain_url: { type: String },
+    logoBase64: { type: String },
 }, { timestamps: true, });
 ClientSchema.pre("save", async function (next) {
     if (!this.isModified("password") || !this.password)

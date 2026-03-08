@@ -40,14 +40,6 @@ export const getClientById = asyncHandler(async (req, res) => {
 
   const clientResponse = client.toObject() as any;
 
-  if (client.subdomain) {
-    const { getClientLogoBase64 } = require('../../utils/ClientProvisioner');
-    const logoBase64 = await getClientLogoBase64(client.subdomain);
-    if (logoBase64) {
-      clientResponse.logoBase64 = logoBase64;
-    }
-  }
-
   return SuccessResponse(res, { message: 'Client retrieved successfully', data: clientResponse }, 200);
 });
 
@@ -88,6 +80,7 @@ export const createClient = asyncHandler(async (req, res) => {
     status,
     package_id,
     subdomain: sanitizedSubdomain,
+    logoBase64,
   });
 
   const dbName = `sc_${client._id}`;
@@ -199,7 +192,7 @@ export const updateClient = asyncHandler(async (req, res) => {
   let logoBase64 = null;
   if (updateData.logoBase64) {
     logoBase64 = updateData.logoBase64;
-    delete updateData.logoBase64;
+    // We do NOT delete it from updateData because we want it updated in the DB
   }
 
   const client = await ClientModel.findOneAndUpdate(

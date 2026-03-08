@@ -11,6 +11,7 @@ interface IClient {
   db_name?: string;
   subdomain?: string;
   subdomain_url?: string;
+  logoBase64?: string;
 }
 
 const ClientSchema = new Schema<IClient>(
@@ -23,6 +24,7 @@ const ClientSchema = new Schema<IClient>(
     db_name: { type: String },
     subdomain: { type: String, unique: true, sparse: true },
     subdomain_url: { type: String },
+    logoBase64: { type: String },
   },
   { timestamps: true, }
 );
