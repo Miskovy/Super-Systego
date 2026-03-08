@@ -3,15 +3,17 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.select = exports.getClientsByStatus = exports.deleteClient = exports.updateClient = exports.createClient = exports.getClientById = exports.getAllClients = void 0;
-const Client_1 = require("../../models/shema/auth/Client");
+exports.viewSelection = exports.installClientSsl = exports.select = exports.regenerateClientEnv = exports.deployClientBackend = exports.rebuildClientFrontend = exports.getClientsByStatus = exports.deleteClient = exports.updateClient = exports.createClient = exports.getClientById = exports.getAllClients = void 0;
+const Client_1 = require("../../models/schema/auth/Client");
 const mongoose_1 = __importDefault(require("mongoose"));
 const express_async_handler_1 = __importDefault(require("express-async-handler"));
 const NotFound_1 = require("../../Errors/NotFound");
 const response_1 = require("../../utils/response");
-const Package_1 = require("../../models/shema/auth/Package");
+const Package_1 = require("../../models/schema/auth/Package");
 const Errors_1 = require("../../Errors");
 const PleskService_1 = require("../../utils/PleskService");
+const ClientProvisioner_1 = require("../../utils/ClientProvisioner");
+const PleskService_2 = require("../../utils/PleskService");
 exports.getAllClients = (0, express_async_handler_1.default)(async (req, res) => {
     const clients = await Client_1.ClientModel.find()
         .select('-password')
@@ -22,14 +24,23 @@ exports.getAllClients = (0, express_async_handler_1.default)(async (req, res) =>
 exports.getClientById = (0, express_async_handler_1.default)(async (req, res) => {
     const id = req.params.id;
     const client = await Client_1.ClientModel.findOne({ _id: id })
+        .select('-password')
         .populate('package_id');
     if (!client) {
         throw new NotFound_1.NotFound('Client not found');
     }
-    return (0, response_1.SuccessResponse)(res, { message: 'Client retrieved successfully', data: client }, 200);
+    const clientResponse = client.toObject();
+    if (client.subdomain) {
+        const { getClientLogoBase64 } = require('../../utils/ClientProvisioner');
+        const logoBase64 = await getClientLogoBase64(client.subdomain);
+        if (logoBase64) {
+            clientResponse.logoBase64 = logoBase64;
+        }
+    }
+    return (0, response_1.SuccessResponse)(res, { message: 'Client retrieved successfully', data: clientResponse }, 200);
 });
 exports.createClient = (0, express_async_handler_1.default)(async (req, res) => {
-    const { company_name, email, password, status, package_id, subdomain } = req.body;
+    const { company_name, email, password, status, package_id, subdomain, logoBase64 } = req.body;
     // --- Validate package ---
     const existingPackage = await Package_1.PackageModel.findById(package_id);
     if (!existingPackage) {
@@ -60,32 +71,68 @@ exports.createClient = (0, express_async_handler_1.default)(async (req, res) => 
         package_id,
         subdomain: sanitizedSubdomain,
     });
-    const dbName = `systego_client_${client._id}`;
+    const dbName = `sc_${client._id}`;
     // --- Create the client's MongoDB database ---
     try {
         const newDbConnection = mongoose_1.default.connection.useDb(dbName, { useCache: true });
+        // 1. Create system metadata
         await newDbConnection.createCollection('metadata');
         await newDbConnection.collection('metadata').insertOne({
             created_at: new Date(),
             client_id: client._id,
             company_name: client.company_name,
         });
-        console.log(`Database ${dbName} created via useDb`);
+        // 1. The Admin schema uses the 'users' collection
+        const targetCollection = 'users';
+        await newDbConnection.createCollection(targetCollection);
+        let initialPasswordHash = password;
+        try {
+            const bcrypt = require('bcryptjs');
+            const salt = await bcrypt.genSalt(10);
+            initialPasswordHash = await bcrypt.hash(password, salt);
+        }
+        catch (e) {
+            console.warn("Could not hash password for initial seed", e);
+        }
+        // 2. Match the Admin Schema keys perfectly
+        await newDbConnection.collection(targetCollection).insertOne({
+            username: 'admin', // Required by Admin Schema
+            email: email, // Required by Admin Schema
+            password_hash: initialPasswordHash, // Admin Schema uses password_hash
+            company_name: company_name, // Optional in Admin Schema
+            phone: "0000000000", // Ensure this matches any frontend requirements
+            role: 'superadmin', // Admin Schema enum
+            status: 'active', // Admin Schema enum
+            permissions: [], // Default empty permissions array
+            createdAt: new Date(),
+            updatedAt: new Date()
+        });
+        console.log(`Database ${dbName} created and seeded with compliant superadmin`);
     }
     catch (error) {
         console.error('Failed to create client database:', error);
         // Rollback: delete the client record
         await Client_1.ClientModel.findByIdAndDelete(client._id);
-        throw new Error('Failed to create client database. Client creation rolled back.');
+        throw new Error(`Failed to create client database: ${error.message || error}. Client creation rolled back.`);
     }
-    // --- Create the Plesk subdomain ---
-    let subdomainUrl;
+    // --- Provision the Client (Create Subdomains & Copy Files) ---
+    let frontendUrl;
+    let backendApiUrl;
     try {
-        subdomainUrl = await (0, PleskService_1.createSubdomain)(sanitizedSubdomain);
-        console.log(`Subdomain ${subdomainUrl} created in Plesk`);
+        const provisionResult = await (0, ClientProvisioner_1.provisionNewClient)(sanitizedSubdomain, {
+            dbName: dbName,
+            // Note: In MongoDB Atlas, you typically use a single database user 
+            // with access to all databases. We pass the default user from ENV here 
+            // if you don't generate separate users per client in Atlas.
+            dbUser: process.env.MONGO_USER || 'admin',
+            dbPass: encodeURIComponent(process.env.MONGO_PASS || 'MONGO@3030')
+        }, logoBase64);
+        frontendUrl = provisionResult.frontendUrl;
+        backendApiUrl = provisionResult.backendApiUrl;
+        console.log(`Subdomains provisioned: Frontend=${frontendUrl}, Backend=${backendApiUrl}`);
     }
     catch (error) {
-        console.error('Failed to create subdomain in Plesk:', error.message);
+        console.error('Failed to provision client in Plesk:', error.message);
         // Rollback: delete the client record and database
         await Client_1.ClientModel.findByIdAndDelete(client._id);
         try {
@@ -94,13 +141,22 @@ exports.createClient = (0, express_async_handler_1.default)(async (req, res) => 
         catch (dbError) {
             console.error('Failed to rollback database:', dbError);
         }
-        throw new Error(`Failed to create subdomain in Plesk: ${error.message}`);
+        res.status(500).json({
+            success: false,
+            message: `Failed to provision client in Plesk: ${error.message}`
+        });
+        return;
     }
-    // --- Update client with db_name and subdomain_url ---
+    // --- Update client with db_name and subdomain URLs ---
     client.db_name = dbName;
-    client.subdomain_url = subdomainUrl;
+    client.subdomain_url = frontendUrl; // Save the frontend URL as the main one
+    // You might want to add client.backend_url = backendApiUrl; in your schema future
     await client.save();
-    return (0, response_1.SuccessResponse)(res, { message: 'Client created successfully', data: client }, 201);
+    // Strip sensitive info before returning
+    const clientResponse = client.toObject();
+    delete clientResponse.admin_password;
+    delete clientResponse.password;
+    return (0, response_1.SuccessResponse)(res, { message: 'Client created successfully', data: clientResponse }, 201);
 });
 exports.updateClient = (0, express_async_handler_1.default)(async (req, res) => {
     const id = req.params.id;
@@ -110,9 +166,18 @@ exports.updateClient = (0, express_async_handler_1.default)(async (req, res) => 
         delete updateData.subdomain;
         delete updateData.subdomain_url;
     }
-    const client = await Client_1.ClientModel.findOneAndUpdate({ _id: id }, updateData, { new: true, runValidators: true }).populate('package_id');
+    let logoBase64 = null;
+    if (updateData.logoBase64) {
+        logoBase64 = updateData.logoBase64;
+        delete updateData.logoBase64;
+    }
+    const client = await Client_1.ClientModel.findOneAndUpdate({ _id: id }, updateData, { new: true, runValidators: true }).select('-password').populate('package_id');
     if (!client) {
         throw new NotFound_1.NotFound('Client not found');
+    }
+    if (logoBase64 && client.subdomain) {
+        const { updateClientLogo } = require('../../utils/ClientProvisioner');
+        await updateClientLogo(client.subdomain, logoBase64);
     }
     return (0, response_1.SuccessResponse)(res, { message: 'Client updated successfully', data: client }, 200);
 });
@@ -122,14 +187,18 @@ exports.deleteClient = (0, express_async_handler_1.default)(async (req, res) => 
     if (!client) {
         throw new NotFound_1.NotFound('Client not found');
     }
-    // --- Delete the Plesk subdomain ---
+    // --- Delete the Plesk subdomains ---
     if (client.subdomain) {
         try {
             await (0, PleskService_1.deleteSubdomain)(client.subdomain);
-            console.log(`Subdomain ${client.subdomain_url} deleted from Plesk`);
+            console.log(`Frontend subdomain ${client.subdomain_url} deleted from Plesk`);
+            // Also delete the backend subdomain
+            const backendSubdomain = `api-${client.subdomain}`;
+            await (0, PleskService_1.deleteSubdomain)(backendSubdomain);
+            console.log(`Backend subdomain ${backendSubdomain}.systego.net deleted from Plesk`);
         }
         catch (error) {
-            console.error('Failed to delete subdomain from Plesk:', error.message);
+            console.error('Failed to delete subdomains from Plesk:', error.message);
             // Continue with client deletion even if subdomain removal fails
             // The admin can manually clean it up in Plesk if needed
         }
@@ -146,7 +215,7 @@ exports.deleteClient = (0, express_async_handler_1.default)(async (req, res) => 
     }
     // --- Delete the client record ---
     await Client_1.ClientModel.findByIdAndDelete(id);
-    return (0, response_1.SuccessResponse)(res, { message: 'Client deleted successfully', data: client }, 200);
+    return (0, response_1.SuccessResponse)(res, { message: 'Client deleted successfully' }, 200);
 });
 exports.getClientsByStatus = (0, express_async_handler_1.default)(async (req, res) => {
     const { status } = req.params;
@@ -155,9 +224,126 @@ exports.getClientsByStatus = (0, express_async_handler_1.default)(async (req, re
         .populate('package_id');
     return (0, response_1.SuccessResponse)(res, { message: `Clients with status ${status} retrieved successfully`, data: clients }, 200);
 });
+exports.rebuildClientFrontend = (0, express_async_handler_1.default)(async (req, res) => {
+    const id = req.params.id;
+    const client = await Client_1.ClientModel.findById(id);
+    if (!client) {
+        throw new NotFound_1.NotFound('Client not found');
+    }
+    if (!client.subdomain) {
+        res.status(400).json({ success: false, message: 'Client has no subdomain' });
+        return;
+    }
+    try {
+        await (0, ClientProvisioner_1.rebuildFrontendForClient)(client.subdomain);
+        return (0, response_1.SuccessResponse)(res, { message: 'Frontend rebuilt successfully' }, 200);
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: 'Failed to rebuild frontend', error: error.message });
+    }
+});
+exports.deployClientBackend = (0, express_async_handler_1.default)(async (req, res) => {
+    const id = req.params.id;
+    const client = await Client_1.ClientModel.findById(id);
+    if (!client) {
+        throw new NotFound_1.NotFound('Client not found');
+    }
+    if (!client.subdomain) {
+        res.status(400).json({ success: false, message: 'Client has no subdomain' });
+        return;
+    }
+    try {
+        const path = require('path');
+        const PLESK_VHOSTS_DIR = process.env.PLESK_VHOSTS_DIR || '/var/www/vhosts/systego.net/subdomains';
+        const backendDestDir = path.join(PLESK_VHOSTS_DIR, `api-${client.subdomain}`);
+        const backendSubdomainUrl = `api-${client.subdomain}.systego.net`;
+        // This process takes time to run npm install and configure Plesk
+        await (0, ClientProvisioner_1.deployBackendForClient)(client.subdomain, backendSubdomainUrl, backendDestDir);
+        return (0, response_1.SuccessResponse)(res, { message: 'Backend Node.js application deployed and restarted successfully' }, 200);
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: 'Failed to deploy backend on Plesk', error: error.message });
+    }
+});
+exports.regenerateClientEnv = (0, express_async_handler_1.default)(async (req, res) => {
+    const id = req.params.id;
+    const client = await Client_1.ClientModel.findById(id);
+    if (!client) {
+        throw new NotFound_1.NotFound('Client not found');
+    }
+    if (!client.subdomain) {
+        res.status(400).json({ success: false, message: 'Client has no subdomain' });
+        return;
+    }
+    try {
+        const path = require('path');
+        const PLESK_VHOSTS_DIR = process.env.PLESK_VHOSTS_DIR || '/var/www/vhosts/systego.net/subdomains';
+        const backendDestDir = path.join(PLESK_VHOSTS_DIR, `api-${client.subdomain}`);
+        const frontendUrl = `${client.subdomain}.systego.net`;
+        const dbName = `sc_${client._id}`;
+        // Regenerate the .env file with corrected line endings
+        await (0, ClientProvisioner_1.generateBackendEnv)(backendDestDir, client.subdomain, frontendUrl, {
+            dbName,
+            dbUser: process.env.MONGO_USER || 'admin',
+            dbPass: encodeURIComponent(process.env.MONGO_PASS || 'MONGO@3030')
+        });
+        // Restart the Node.js app to pick up new env
+        const apiSubdomain = `api-${client.subdomain}.systego.net`;
+        await (0, PleskService_2.executePleskCli)('extension', ['--call', 'nodejs', '--disable', '-domain', apiSubdomain]);
+        await (0, PleskService_2.executePleskCli)('extension', ['--call', 'nodejs', '--enable', '-domain', apiSubdomain]);
+        return (0, response_1.SuccessResponse)(res, { message: 'Backend .env regenerated and app restarted successfully' }, 200);
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: 'Failed to regenerate .env', error: error.message });
+    }
+});
 exports.select = (0, express_async_handler_1.default)(async (req, res) => {
     const packages = await Package_1.PackageModel.find()
         .select('name')
         .sort({ created_at: -1 });
+    return (0, response_1.SuccessResponse)(res, { message: 'Packages retrieved successfully', data: packages }, 200);
+});
+exports.installClientSsl = (0, express_async_handler_1.default)(async (req, res) => {
+    const id = req.params.id;
+    const client = await Client_1.ClientModel.findById(id);
+    if (!client || !client.subdomain) {
+        throw new NotFound_1.NotFound('Client or subdomain not found');
+    }
+    const frontendSubdomainUrl = `${client.subdomain}.systego.net`;
+    const backendSubdomainUrl = `api-${client.subdomain}.systego.net`;
+    console.log(`[SSL API] Starting SSL installation for client: ${client.company_name}`);
+    try {
+        const { executePleskCli } = require('../../utils/PleskService');
+        const adminEmail = process.env.SSL_ADMIN_EMAIL || 'systego.eg@gmail.com';
+        // Wait 10 seconds for Plesk to fully write Apache/Nginx configs if called immediately after creation
+        console.log(`[SSL API] Waiting 10 seconds for Web Server configuration to reload...`);
+        const { setTimeout } = require('timers/promises');
+        await setTimeout(10000);
+        console.log(`[SSL API] Installing Let's Encrypt SSL for ${frontendSubdomainUrl}...`);
+        await executePleskCli('extension', [
+            '--exec', 'letsencrypt',
+            'cli.php',
+            '-d', frontendSubdomainUrl,
+            '-m', adminEmail
+        ]);
+        console.log(`[SSL API] Installing Let's Encrypt SSL for ${backendSubdomainUrl}...`);
+        await executePleskCli('extension', [
+            '--exec', 'letsencrypt',
+            'cli.php',
+            '-d', backendSubdomainUrl,
+            '-m', adminEmail
+        ]);
+        (0, response_1.SuccessResponse)(res, { message: 'SSL certificates successfully installed' }, 200);
+    }
+    catch (error) {
+        console.error('[SSL API] Failed to install SSL:', error);
+        res.status(500).json({
+            success: false,
+            message: `Failed to install SSL certificates: ${error.message}`
+        });
+    }
+});
+exports.viewSelection = (0, express_async_handler_1.default)(async (req, res) => {
+    const packages = await Package_1.PackageModel.find();
     return (0, response_1.SuccessResponse)(res, { message: 'Packages retrieved successfully', data: packages }, 200);
 });

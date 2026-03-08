@@ -15,6 +15,7 @@ const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const helmet_1 = __importDefault(require("helmet"));
 const connection_1 = require("./models/connection");
 const seedAdmin_1 = require("./utils/seedAdmin");
+// Load environment variables
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 (0, connection_1.connectDB)().then(seedAdmin_1.seedAdminFromEnv).catch(() => { });
@@ -35,6 +36,10 @@ const io = new socket_io_1.Server(server, {
     cors: { origin: "*" },
 });
 // ربط Socket.IO
+// Increase server timeouts for long-running provisioning tasks (5 minutes)
+server.timeout = 300000;
+server.keepAliveTimeout = 300000;
+server.headersTimeout = 301000;
 server.listen(3000, () => {
     console.log("Server is running on http://localhost:3000");
 });

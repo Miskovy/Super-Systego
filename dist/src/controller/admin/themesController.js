@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteTheme = exports.updateTheme = exports.createTheme = exports.getThemeById = exports.getAllThemes = void 0;
-const Theme_1 = require("../../models/shema/auth/Theme");
+const Theme_1 = require("../../models/schema/auth/Theme");
 const express_async_handler_1 = __importDefault(require("express-async-handler"));
 const NotFound_1 = require("../../Errors/NotFound");
 const response_1 = require("../../utils/response");

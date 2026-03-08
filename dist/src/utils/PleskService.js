@@ -7,6 +7,8 @@ exports.createSubdomain = createSubdomain;
 exports.deleteSubdomain = deleteSubdomain;
 exports.sanitizeSubdomainName = sanitizeSubdomainName;
 exports.validateSubdomainName = validateSubdomainName;
+exports.enableNodeJsOnDomain = enableNodeJsOnDomain;
+exports.executePleskCli = executePleskCli;
 const axios_1 = __importDefault(require("axios"));
 const https_1 = __importDefault(require("https"));
 // Create HTTPS agent that accepts self-signed certificates (for local Plesk)
@@ -17,23 +19,30 @@ const httpsAgent = new https_1.default.Agent({ rejectUnauthorized: false });
  * Uses HTTP POST to the Plesk XML API endpoint with API Key authentication.
  * Endpoint: https://<PLESK_HOST>:<PLESK_PORT>/enterprise/control/agent.php
  */
-const PLESK_HOST = process.env.PLESK_HOST || 'localhost';
-const PLESK_PORT = process.env.PLESK_PORT || '8443';
-const PLESK_API_KEY = process.env.PLESK_API_KEY || '';
-const PLESK_PARENT_DOMAIN = process.env.PLESK_PARENT_DOMAIN || 'systego.net';
-const PLESK_API_URL = `https://${PLESK_HOST}:${PLESK_PORT}/enterprise/control/agent.php`;
+/**
+ * Read Plesk config at call time (after dotenv has loaded).
+ */
+function getPleskConfig() {
+    const host = process.env.PLESK_HOST || 'localhost';
+    const port = process.env.PLESK_PORT || '8443';
+    const apiKey = process.env.PLESK_API_KEY || '';
+    const parentDomain = process.env.PLESK_PARENT_DOMAIN || 'systego.net';
+    const apiUrl = `https://${host}:${port}/enterprise/control/agent.php`;
+    return { host, port, apiKey, parentDomain, apiUrl };
+}
 /**
  * Send an XML packet to the Plesk API.
  */
 async function sendPleskRequest(xmlPacket) {
-    if (!PLESK_API_KEY) {
+    const { apiKey, apiUrl } = getPleskConfig();
+    if (!apiKey) {
         throw new Error('PLESK_API_KEY is not configured. Please set it in your .env file.');
     }
     try {
-        const response = await axios_1.default.post(PLESK_API_URL, xmlPacket, {
+        const response = await axios_1.default.post(apiUrl, xmlPacket, {
             headers: {
                 'Content-Type': 'text/xml',
-                'KEY': PLESK_API_KEY,
+                'KEY': apiKey,
             },
             httpsAgent: httpsAgent,
         });
@@ -73,14 +82,15 @@ function parsePleskResponse(responseXml, operation) {
  * @returns The full subdomain URL (e.g., "myschool.systego.net")
  */
 async function createSubdomain(subdomainName) {
+    const { parentDomain } = getPleskConfig();
     const sanitized = sanitizeSubdomainName(subdomainName);
-    const fullSubdomain = `${sanitized}.${PLESK_PARENT_DOMAIN}`;
+    const fullSubdomain = `${sanitized}.${parentDomain}`;
     console.log(`Creating subdomain: ${fullSubdomain}`);
     const xmlPacket = `<?xml version="1.0" encoding="UTF-8"?>
 <packet>
   <subdomain>
     <add>
-      <parent>${PLESK_PARENT_DOMAIN}</parent>
+      <parent>${parentDomain}</parent>
       <name>${sanitized}</name>
       <property>
         <name>www_root</name>
@@ -99,8 +109,9 @@ async function createSubdomain(subdomainName) {
  * @param subdomainName - The subdomain prefix (e.g., "myschool")
  */
 async function deleteSubdomain(subdomainName) {
+    const { parentDomain } = getPleskConfig();
     const sanitized = sanitizeSubdomainName(subdomainName);
-    const fullSubdomain = `${sanitized}.${PLESK_PARENT_DOMAIN}`;
+    const fullSubdomain = `${sanitized}.${parentDomain}`;
     console.log(`Deleting subdomain: ${fullSubdomain}`);
     const xmlPacket = `<?xml version="1.0" encoding="UTF-8"?>
 <packet>
@@ -154,4 +165,68 @@ function validateSubdomainName(name) {
         return `Subdomain name "${sanitized}" is reserved and cannot be used`;
     }
     return null;
+}
+/**
+ * Enable Node.js support for a domain using the Plesk CLI via XML API.
+ *
+ * @param subdomainName - The subdomain prefix (e.g., "api-myschool")
+ */
+async function enableNodeJsOnDomain(subdomainName) {
+    const { parentDomain } = getPleskConfig();
+    const sanitized = sanitizeSubdomainName(subdomainName);
+    const fullSubdomain = `${sanitized}.${parentDomain}`;
+    console.log(`Enabling Node.js for subdomain: ${fullSubdomain}`);
+    const xmlPacket = `<?xml version="1.0" encoding="UTF-8"?>
+<packet>
+  <extension>
+    <call>
+      <nodejs>
+        <enable>
+          <domain>${fullSubdomain}</domain>
+        </enable>
+      </nodejs>
+    </call>
+  </extension>
+</packet>`;
+    const response = await sendPleskRequest(xmlPacket);
+    parsePleskResponse(response, 'enable node.js');
+}
+/**
+ * Execute a Plesk CLI command utilizing the Plesk REST API.
+ * This expertly bypasses the Linux 'sudo' restriction by submitting commands
+ * directly to the authenticated internal Plesk system.
+ *
+ * @param utility - The CLI utility name (e.g., 'nodejs' or 'domain')
+ * @param args - Array of string arguments to pass to the utility
+ */
+async function executePleskCli(utility, args) {
+    const { host, port, apiKey } = getPleskConfig();
+    const apiUrl = `https://${host}:${port}/api/v2/cli/${utility}/call`;
+    if (!apiKey) {
+        throw new Error('PLESK_API_KEY is not configured in .env');
+    }
+    console.log(`[Plesk API] Executing CLI command via REST: plesk bin ${utility} ${args.join(' ')}`);
+    try {
+        const response = await axios_1.default.post(apiUrl, { params: args }, {
+            headers: {
+                'Content-Type': 'application/json',
+                'X-API-Key': apiKey,
+                'Accept': 'application/json'
+            },
+            httpsAgent: httpsAgent,
+        });
+        const data = response.data;
+        // Even if HTTP is 200 OK, the internal command might have failed (code != 0)
+        if (data && data.code !== 0) {
+            console.warn(`[Plesk API Warning] Command returned code ${data.code}. Stderr: ${data.stderr}`);
+            throw new Error(`Command failed with code ${data.code}: ${data.stderr || data.stdout}`);
+        }
+        return data;
+    }
+    catch (error) {
+        const message = error.response?.data?.message || error.message;
+        const stderr = error.response?.data?.stderr || '';
+        console.error(`[Plesk REST API Error] Failed to execute ${utility}: ${message}. Stderr: ${stderr}`);
+        throw new Error(`Plesk CLI execution failed: ${message} - ${stderr}`);
+    }
 }

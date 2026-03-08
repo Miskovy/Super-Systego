@@ -43,6 +43,7 @@ export const create = async (req: Request, res: Response) => {
   return SuccessResponse(res, { message: 'Package created successfully' }, 201);
 };
 
+
 export const modify = async (req: Request, res: Response) => {
   const id = req.params.id;
   let package_item = await PackageModel.findById(id);

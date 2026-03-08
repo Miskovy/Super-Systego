@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.delete_item = exports.modify = exports.create = exports.getById = exports.view = void 0;
-const Package_1 = require("../../models/shema/auth/Package");
+const Package_1 = require("../../models/schema/auth/Package");
 const Errors_1 = require("../../Errors");
 const response_1 = require("../../utils/response");
 const view = async (req, res) => {

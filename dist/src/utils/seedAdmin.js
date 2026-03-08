@@ -5,7 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.seedAdminFromEnv = seedAdminFromEnv;
 const bcrypt_1 = __importDefault(require("bcrypt"));
-const Admin_1 = require("../models/shema/auth/Admin");
+const Admin_1 = require("../models/schema/auth/Admin");
 async function seedAdminFromEnv() {
     const adminEmail = process.env.ADMIN_EMAIL;
     const adminPassword = process.env.ADMIN_PASSWORD;

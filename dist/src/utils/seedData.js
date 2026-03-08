@@ -1,11 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.seedData = void 0;
-const Theme_1 = require("../models/shema/auth/Theme");
-const Package_1 = require("../models/shema/auth/Package");
-const PaymentMethod_1 = require("../models/shema/auth/PaymentMethod");
-const Coupon_1 = require("../models/shema/auth/Coupon");
-const Client_1 = require("../models/shema/auth/Client");
+const Theme_1 = require("../models/schema/auth/Theme");
+const Package_1 = require("../models/schema/auth/Package");
+const PaymentMethod_1 = require("../models/schema/auth/PaymentMethod");
+const Coupon_1 = require("../models/schema/auth/Coupon");
+const Client_1 = require("../models/schema/auth/Client");
 const seedData = async () => {
     console.log("Starting database seeding...");
     try {

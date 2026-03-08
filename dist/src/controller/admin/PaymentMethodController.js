@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getActivePaymentMethods = exports.deletePaymentMethod = exports.updatePaymentMethod = exports.createPaymentMethod = exports.getPaymentMethodById = exports.getAllPaymentMethods = void 0;
-const PaymentMethod_1 = require("../../models/shema/auth/PaymentMethod");
+const PaymentMethod_1 = require("../../models/schema/auth/PaymentMethod");
 const express_async_handler_1 = __importDefault(require("express-async-handler"));
 const NotFound_1 = require("../../Errors/NotFound");
 const unauthorizedError_1 = require("../../Errors/unauthorizedError");
