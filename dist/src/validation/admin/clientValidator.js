@@ -71,6 +71,10 @@ exports.updateClientValidator = joi_1.default.object({
         .messages({
         'string.hex': 'Package ID must be a valid hexadecimal string',
         'string.length': 'Package ID must be exactly 24 characters long'
+    }),
+    logoBase64: joi_1.default.string().optional().allow('')
+        .messages({
+        'string.base': 'Logo must be a valid base64 string'
     })
 }).min(1).messages({
     'object.min': 'At least one field is required to update'
