@@ -681,3 +681,32 @@ export const testSslInstallation = async (req: Request, res: Response) => {
         }
     }
 };
+
+/**
+ * Gets the base64 string of the client's current logo from the provisioned frontend.
+ */
+export async function getClientLogoBase64(clientName: string): Promise<string | null> {
+    try {
+        const destDir = path.join(PLESK_VHOSTS_DIR, clientName);
+        const assetsDir = path.join(destDir, 'assets');
+        const files = await fs.readdir(assetsDir);
+        const logoFile = files.find(f => f.startsWith('logo-') && f.endsWith('.png'));
+
+        if (logoFile) {
+            const logoPath = path.join(assetsDir, logoFile);
+            const imageBuffer = await fs.readFile(logoPath);
+            return `data:image/png;base64,${imageBuffer.toString('base64')}`;
+        }
+    } catch (e: any) {
+        console.warn(`[Provisioning] Could not get client logo: ${e.message}`);
+    }
+    return null;
+}
+
+/**
+ * Updates the client's logo on an existing provisioned frontend.
+ */
+export async function updateClientLogo(clientName: string, logoBase64: string) {
+    const destDir = path.join(PLESK_VHOSTS_DIR, clientName);
+    await replaceClientLogo(destDir, logoBase64);
+}

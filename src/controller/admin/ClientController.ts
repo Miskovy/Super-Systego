@@ -31,13 +31,24 @@ export const getAllClients = asyncHandler(async (req, res) => {
 export const getClientById = asyncHandler(async (req, res) => {
   const id = req.params.id;
   const client = await ClientModel.findOne({ _id: id })
+    .select('-password')
     .populate('package_id');
 
   if (!client) {
     throw new NotFound('Client not found');
   }
 
-  return SuccessResponse(res, { message: 'Client retrieved successfully', data: client }, 200);
+  const clientResponse = client.toObject() as any;
+
+  if (client.subdomain) {
+    const { getClientLogoBase64 } = require('../../utils/ClientProvisioner');
+    const logoBase64 = await getClientLogoBase64(client.subdomain);
+    if (logoBase64) {
+      clientResponse.logoBase64 = logoBase64;
+    }
+  }
+
+  return SuccessResponse(res, { message: 'Client retrieved successfully', data: clientResponse }, 200);
 });
 
 export const createClient = asyncHandler(async (req, res) => {
@@ -185,14 +196,25 @@ export const updateClient = asyncHandler(async (req, res) => {
     delete updateData.subdomain_url;
   }
 
+  let logoBase64 = null;
+  if (updateData.logoBase64) {
+    logoBase64 = updateData.logoBase64;
+    delete updateData.logoBase64;
+  }
+
   const client = await ClientModel.findOneAndUpdate(
     { _id: id },
     updateData,
     { new: true, runValidators: true }
-  ).populate('package_id');
+  ).select('-password').populate('package_id');
 
   if (!client) {
     throw new NotFound('Client not found');
+  }
+
+  if (logoBase64 && client.subdomain) {
+    const { updateClientLogo } = require('../../utils/ClientProvisioner');
+    await updateClientLogo(client.subdomain, logoBase64);
   }
 
   return SuccessResponse(res, { message: 'Client updated successfully', data: client }, 200);
