@@ -19,7 +19,7 @@ router.post('/:id/rebuild-frontend', ClientController_1.rebuildClientFrontend);
 router.post('/:id/deploy-backend', ClientController_1.deployClientBackend);
 router.post('/:id/regenerate-env', ClientController_1.regenerateClientEnv);
 router.post('/:id/install-ssl', ClientController_1.installClientSsl);
-router.post('/install-dependencies', ClientProvisioner_1.installClientDependencies);
+router.post('/:id/install-dependencies', ClientProvisioner_1.installClientDependencies);
 router.post('/diagnose', ClientProvisioner_1.diagnoseClient);
 router.post('/diagnose-ssl', ClientProvisioner_1.testSslInstallation);
 exports.default = router;

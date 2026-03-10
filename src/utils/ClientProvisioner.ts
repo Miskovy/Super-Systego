@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { createSubdomain, deleteSubdomain, executePleskCli } from './PleskService';
+import { ClientModel } from '../models/schema/auth/Client';
 import { exec } from 'child_process';
 import util from 'util';
 import { Request, Response } from 'express';
@@ -506,12 +507,18 @@ export async function getPleskSystemUser(vhostsDir: string): Promise<string> {
 }
 
 export const installClientDependencies = async (req: Request, res: Response) => {
-    const { clientName } = req.body;
+    const clientId = req.params.id;
 
-    if (!clientName) {
-        return res.status(400).json({ success: false, message: "clientName is required" });
+    if (!clientId) {
+        return res.status(400).json({ success: false, message: "Client ID is required" });
     }
 
+    const client = await ClientModel.findById(clientId);
+    if (!client || !client.subdomain) {
+        return res.status(404).json({ success: false, message: "Client not found or subdomain not set" });
+    }
+
+    const clientName = client.subdomain;
     const PLESK_VHOSTS_DIR = '/var/www/vhosts/systego.net/subdomains';
     const backendDestDir = path.join(PLESK_VHOSTS_DIR, `api-${clientName}`);
 

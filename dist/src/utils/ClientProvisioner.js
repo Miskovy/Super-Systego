@@ -15,6 +15,7 @@ exports.updateClientLogo = updateClientLogo;
 const promises_1 = __importDefault(require("fs/promises"));
 const path_1 = __importDefault(require("path"));
 const PleskService_1 = require("./PleskService");
+const Client_1 = require("../models/schema/auth/Client");
 const child_process_1 = require("child_process");
 const util_1 = __importDefault(require("util"));
 const execAsync = util_1.default.promisify(child_process_1.exec);
@@ -455,10 +456,15 @@ async function getPleskSystemUser(vhostsDir) {
     }
 }
 const installClientDependencies = async (req, res) => {
-    const { clientName } = req.body;
-    if (!clientName) {
-        return res.status(400).json({ success: false, message: "clientName is required" });
+    const clientId = req.params.id;
+    if (!clientId) {
+        return res.status(400).json({ success: false, message: "Client ID is required" });
     }
+    const client = await Client_1.ClientModel.findById(clientId);
+    if (!client || !client.subdomain) {
+        return res.status(404).json({ success: false, message: "Client not found or subdomain not set" });
+    }
+    const clientName = client.subdomain;
     const PLESK_VHOSTS_DIR = '/var/www/vhosts/systego.net/subdomains';
     const backendDestDir = path_1.default.join(PLESK_VHOSTS_DIR, `api-${clientName}`);
     // 1. IMMEDIATELY return a success response to the frontend so Nginx doesn't timeout!

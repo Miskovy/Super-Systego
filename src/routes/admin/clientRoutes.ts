@@ -23,7 +23,7 @@ router.post('/:id/rebuild-frontend', rebuildClientFrontend);
 router.post('/:id/deploy-backend', deployClientBackend);
 router.post('/:id/regenerate-env', regenerateClientEnv);
 router.post('/:id/install-ssl', installClientSsl);
-router.post('/install-dependencies', installClientDependencies);
+router.post('/:id/install-dependencies', installClientDependencies);
 router.post('/diagnose', diagnoseClient);
 router.post('/diagnose-ssl', testSslInstallation);
 
