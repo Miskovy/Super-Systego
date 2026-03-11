@@ -376,6 +376,7 @@ async function injectApiUrlIntoBundle(dirPath: string, newApiUrl: string) {
 
     // Some React apps might use /api appended, some might not. 
     // It's safest to just replace the base domain globally.
+    // NOTE: The POS project uses "Bcknd" (capital B), so we must match case-insensitively.
 
     async function scanAndReplace(currentDir: string) {
         const entries = await fs.readdir(currentDir, { withFileTypes: true });
@@ -389,10 +390,10 @@ async function injectApiUrlIntoBundle(dirPath: string, newApiUrl: string) {
                 try {
                     let content = await fs.readFile(fullPath, 'utf8');
 
-                    if (content.includes(oldUrlBase)) {
-                        // Replace all occurrences globally
-                        // Use a global regex to catch every instance
-                        const regex = new RegExp(oldUrlBase.replace(/[.*/+?^${}()|[\]\\]/g, '\\$&'), 'g');
+                    // Case-insensitive check to catch both "bcknd" and "Bcknd"
+                    if (content.toLowerCase().includes(oldUrlBase.toLowerCase())) {
+                        // Replace all occurrences globally, case-insensitive
+                        const regex = new RegExp(oldUrlBase.replace(/[.*\/+?^${}()|[\]\\]/g, '\\$&'), 'gi');
                         content = content.replace(regex, newApiUrl);
 
                         await fs.writeFile(fullPath, content, 'utf8');
