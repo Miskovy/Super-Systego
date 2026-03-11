@@ -57,6 +57,16 @@ export async function provisionNewClient(
         if (logoBase64) {
             console.log(`[Provisioning] Injecting custom client logo...`);
             await replaceClientLogo(frontendDestDir, logoBase64);
+
+            // Also replace logo in the point-of-sale project
+            const posDir = path.join(frontendDestDir, 'point-of-sale');
+            try {
+                await fs.access(posDir);
+                console.log(`[Provisioning] Injecting custom client logo into POS project...`);
+                await replaceClientLogo(posDir, logoBase64);
+            } catch {
+                console.log(`[Provisioning] No point-of-sale directory found, skipping POS logo`);
+            }
         }
 
         // 4. Create the necessary .htaccess for the React frontend
@@ -65,7 +75,18 @@ export async function provisionNewClient(
         // 4.5. Generate client-specific .env file for the React frontend (fallback)
         await generateFrontendEnv(frontendDestDir, backendSubdomainUrl);
 
-        // 4.6. INJECT the API URL directly into the compiled Vite bundles!
+        // 4.6. Also generate .env for the point-of-sale project
+        const posFrontendDir = path.join(frontendDestDir, 'point-of-sale');
+        try {
+            await fs.access(posFrontendDir);
+            console.log(`[Provisioning] Generating POS .env file...`);
+            await generateFrontendEnv(posFrontendDir, backendSubdomainUrl);
+        } catch {
+            console.log(`[Provisioning] No point-of-sale directory found, skipping POS .env`);
+        }
+
+        // 4.7. INJECT the API URL directly into the compiled Vite bundles!
+        // This scans recursively, covering both admin and POS bundles
         console.log(`[Provisioning] Injecting dynamic API URLs into React bundles...`);
         await injectApiUrlIntoBundle(frontendDestDir, `https://${backendSubdomainUrl}`);
 
@@ -242,15 +263,32 @@ SHIFT_REPORT_PASSWORD=123456789
 }
 
 /**
- * Helper: Generates .htaccess for React SPA routing
+ * Helper: Generates .htaccess for both the Admin SPA and the Point-of-Sale SPA.
+ * Uses the same proven configuration as the main systego.net domain.
  */
 async function generateFrontendHtaccess(destDir: string) {
     const htaccessPath = path.join(destDir, '.htaccess');
     const content = `
-Options -MultiViews
-RewriteEngine On
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteRule ^ index.html [QSA,L]
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    # Redirect /point-of-sale to /point-of-sale/ (with trailing slash)
+    RewriteCond %{REQUEST_URI} ^/point-of-sale$
+    RewriteRule ^(.*)$ /point-of-sale/ [R=301,L]
+
+    # Handle point-of-sale project
+    RewriteCond %{REQUEST_URI} ^/point-of-sale/ [NC]
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^point-of-sale/(.*)$ /point-of-sale/index.html [L]
+
+    # Handle main project (root) - everything else
+    RewriteCond %{REQUEST_URI} !^/point-of-sale/ [NC]
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^(.*)$ /index.html [L]
+</IfModule>
     `.trim();
 
     await fs.writeFile(htaccessPath, content, 'utf-8');
@@ -347,7 +385,7 @@ async function injectApiUrlIntoBundle(dirPath: string, newApiUrl: string) {
 
             if (entry.isDirectory()) {
                 await scanAndReplace(fullPath);
-            } else if (entry.isFile() && (entry.name.endsWith('.js') || entry.name.endsWith('.html') || entry.name.endsWith('.json'))) {
+            } else if (entry.isFile() && (entry.name.endsWith('.js') || entry.name.endsWith('.html') || entry.name.endsWith('.json') || entry.name === '.env')) {
                 try {
                     let content = await fs.readFile(fullPath, 'utf8');
 
@@ -715,8 +753,19 @@ export async function getClientLogoBase64(clientName: string): Promise<string | 
 
 /**
  * Updates the client's logo on an existing provisioned frontend.
+ * Also updates the logo in the point-of-sale project if it exists.
  */
 export async function updateClientLogo(clientName: string, logoBase64: string) {
     const destDir = path.join(PLESK_VHOSTS_DIR, clientName);
     await replaceClientLogo(destDir, logoBase64);
+
+    // Also replace logo in the point-of-sale project
+    const posDir = path.join(destDir, 'point-of-sale');
+    try {
+        await fs.access(posDir);
+        await replaceClientLogo(posDir, logoBase64);
+        console.log(`[Provisioning] Also updated logo in POS project`);
+    } catch {
+        // POS directory doesn't exist, skip silently
+    }
 }
