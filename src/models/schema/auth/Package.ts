@@ -9,6 +9,8 @@ const PackageSchema = new mongoose.Schema(
     half_yearly_price: { type: Number, required: true },
     yearly_price: { type: Number, required: true },
     status: { type: Boolean },
+    haveEcommerce: { type: Boolean, default: false },
+    haveMobileApp: { type: Boolean, default: false }
   },
   { timestamps: true, }
 );

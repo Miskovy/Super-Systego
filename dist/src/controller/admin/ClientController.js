@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.viewSelection = exports.installClientSsl = exports.select = exports.regenerateClientEnv = exports.deployClientBackend = exports.rebuildClientFrontend = exports.getClientsByStatus = exports.deleteClient = exports.updateClient = exports.createClient = exports.getClientById = exports.getAllClients = void 0;
+exports.generateApiKeysForExistingClients = exports.regenerateApiKey = exports.viewSelection = exports.installClientSsl = exports.select = exports.regenerateClientEnv = exports.deployClientBackend = exports.rebuildClientFrontend = exports.getClientsByStatus = exports.deleteClient = exports.updateClient = exports.createClient = exports.getClientById = exports.getAllClients = void 0;
 const Client_1 = require("../../models/schema/auth/Client");
 const mongoose_1 = __importDefault(require("mongoose"));
 const express_async_handler_1 = __importDefault(require("express-async-handler"));
@@ -11,9 +11,11 @@ const NotFound_1 = require("../../Errors/NotFound");
 const response_1 = require("../../utils/response");
 const Package_1 = require("../../models/schema/auth/Package");
 const Errors_1 = require("../../Errors");
+const crypto_1 = __importDefault(require("crypto"));
 const PleskService_1 = require("../../utils/PleskService");
 const ClientProvisioner_1 = require("../../utils/ClientProvisioner");
 const PleskService_2 = require("../../utils/PleskService");
+const TenantApiKey_1 = require("../../models/schema/auth/TenantApiKey");
 exports.getAllClients = (0, express_async_handler_1.default)(async (req, res) => {
     const clients = await Client_1.ClientModel.find()
         .select('-password -logoBase64 -admin_password') // Exclude heavy payloads & secrets
@@ -149,6 +151,23 @@ exports.createClient = (0, express_async_handler_1.default)(async (req, res) => 
     client.subdomain_url = frontendUrl; // Save the frontend URL as the main one
     // You might want to add client.backend_url = backendApiUrl; in your schema future
     await client.save();
+    // --- Generate Tenant API Key for secure Super Systego communication ---
+    let rawApiKey;
+    try {
+        rawApiKey = `sk_${crypto_1.default.randomUUID()}_${crypto_1.default.randomBytes(16).toString('hex')}`;
+        const hashedKey = crypto_1.default.createHash('sha256').update(rawApiKey).digest('hex');
+        await TenantApiKey_1.TenantApiKeyModel.create({
+            client_id: client._id,
+            hashedKey,
+            label: 'default',
+            active: true,
+        });
+        console.log(`[Provisioning] Tenant API key generated for client: ${client.company_name}`);
+    }
+    catch (apiKeyError) {
+        console.error('Failed to generate tenant API key:', apiKeyError.message);
+        // Non-fatal: client is created, key can be regenerated later
+    }
     // Strip sensitive info before returning
     const clientResponse = client.toObject();
     delete clientResponse.admin_password;
@@ -343,4 +362,129 @@ exports.installClientSsl = (0, express_async_handler_1.default)(async (req, res)
 exports.viewSelection = (0, express_async_handler_1.default)(async (req, res) => {
     const packages = await Package_1.PackageModel.find();
     return (0, response_1.SuccessResponse)(res, { message: 'Packages retrieved successfully', data: packages }, 200);
+});
+/**
+ * POST /api/admin/clients/:id/regenerate-api-key
+ *
+ * Revokes the old API key and generates a new one.
+ * The new raw key is returned ONCE — it must be stored securely.
+ */
+exports.regenerateApiKey = (0, express_async_handler_1.default)(async (req, res) => {
+    const id = req.params.id;
+    const client = await Client_1.ClientModel.findById(id);
+    if (!client) {
+        throw new NotFound_1.NotFound('Client not found');
+    }
+    // Revoke all existing active keys for this client
+    await TenantApiKey_1.TenantApiKeyModel.updateMany({ client_id: client._id, active: true }, { $set: { active: false } });
+    // Generate a new key
+    const rawApiKey = `sk_${crypto_1.default.randomUUID()}_${crypto_1.default.randomBytes(16).toString('hex')}`;
+    const hashedKey = crypto_1.default.createHash('sha256').update(rawApiKey).digest('hex');
+    await TenantApiKey_1.TenantApiKeyModel.create({
+        client_id: client._id,
+        hashedKey,
+        label: 'regenerated',
+        active: true,
+    });
+    // If the client has a subdomain, update the .env on the server
+    if (client.subdomain) {
+        try {
+            const path = require('path');
+            const PLESK_VHOSTS_DIR = process.env.PLESK_VHOSTS_DIR || '/var/www/vhosts/systego.net/subdomains';
+            const backendDestDir = path.join(PLESK_VHOSTS_DIR, `api-${client.subdomain}`);
+            const frontendUrl = `${client.subdomain}.systego.net`;
+            const dbName = client.db_name || `sc_${client._id}`;
+            await (0, ClientProvisioner_1.generateBackendEnv)(backendDestDir, client.subdomain, frontendUrl, {
+                dbName,
+                dbUser: process.env.MONGO_USER || 'admin',
+                dbPass: encodeURIComponent(process.env.MONGO_PASS || 'MONGO@3030')
+            }, rawApiKey);
+            // Restart the Node.js app to pick up the new env
+            const apiSubdomain = `api-${client.subdomain}.systego.net`;
+            await (0, PleskService_2.executePleskCli)('extension', ['--call', 'nodejs', '--disable', '-domain', apiSubdomain]);
+            await (0, PleskService_2.executePleskCli)('extension', ['--call', 'nodejs', '--enable', '-domain', apiSubdomain]);
+            console.log(`[API Key] Updated .env and restarted backend for ${client.company_name}`);
+        }
+        catch (envError) {
+            console.error(`[API Key] Failed to update .env on server: ${envError.message}`);
+            // Still return the key — admin can manually update the .env
+        }
+    }
+    return (0, response_1.SuccessResponse)(res, {
+        message: 'API key regenerated successfully. Store this key securely — it will not be shown again.',
+        data: { apiKey: rawApiKey }
+    }, 200);
+});
+/**
+ * POST /api/admin/clients/generate-all-api-keys
+ *
+ * One-time migration: Generates API keys for ALL existing clients
+ * that don't have an active key yet.
+ *
+ * Returns the raw keys for each client — store them securely!
+ * Optionally updates each client's .env on the server if updateEnv=true is passed.
+ */
+exports.generateApiKeysForExistingClients = (0, express_async_handler_1.default)(async (req, res) => {
+    const { updateEnv } = req.body; // if true, also update .env on server
+    // Find all clients
+    const allClients = await Client_1.ClientModel.find().select('_id company_name subdomain db_name');
+    // Find which clients already have active keys
+    const existingKeys = await TenantApiKey_1.TenantApiKeyModel.find({ active: true }).select('client_id');
+    const clientsWithKeys = new Set(existingKeys.map(k => k.client_id.toString()));
+    // Filter to clients WITHOUT a key
+    const clientsNeedingKeys = allClients.filter(c => !clientsWithKeys.has(c._id.toString()));
+    if (clientsNeedingKeys.length === 0) {
+        return (0, response_1.SuccessResponse)(res, {
+            message: 'All clients already have active API keys. No action needed.',
+            data: { generated: 0 }
+        }, 200);
+    }
+    const results = [];
+    for (const client of clientsNeedingKeys) {
+        // Generate unique key
+        const rawApiKey = `sk_${crypto_1.default.randomUUID()}_${crypto_1.default.randomBytes(16).toString('hex')}`;
+        const hashedKey = crypto_1.default.createHash('sha256').update(rawApiKey).digest('hex');
+        await TenantApiKey_1.TenantApiKeyModel.create({
+            client_id: client._id,
+            hashedKey,
+            label: 'migration',
+            active: true,
+        });
+        let envUpdated = false;
+        // Optionally update the .env on the server
+        if (updateEnv && client.subdomain) {
+            try {
+                const path = require('path');
+                const PLESK_VHOSTS_DIR = process.env.PLESK_VHOSTS_DIR || '/var/www/vhosts/systego.net/subdomains';
+                const backendDestDir = path.join(PLESK_VHOSTS_DIR, `api-${client.subdomain}`);
+                const frontendUrl = `${client.subdomain}.systego.net`;
+                const dbName = client.db_name || `sc_${client._id}`;
+                await (0, ClientProvisioner_1.generateBackendEnv)(backendDestDir, client.subdomain, frontendUrl, {
+                    dbName,
+                    dbUser: process.env.MONGO_USER || 'admin',
+                    dbPass: encodeURIComponent(process.env.MONGO_PASS || 'MONGO@3030')
+                }, rawApiKey);
+                // Restart the Node.js app to pick up the new env
+                const apiSubdomain = `api-${client.subdomain}.systego.net`;
+                await (0, PleskService_2.executePleskCli)('extension', ['--call', 'nodejs', '--disable', '-domain', apiSubdomain]);
+                await (0, PleskService_2.executePleskCli)('extension', ['--call', 'nodejs', '--enable', '-domain', apiSubdomain]);
+                envUpdated = true;
+            }
+            catch (err) {
+                console.error(`[Migration] Failed to update .env for ${client.company_name}: ${err.message}`);
+            }
+        }
+        results.push({
+            clientId: client._id.toString(),
+            companyName: client.company_name,
+            subdomain: client.subdomain,
+            apiKey: rawApiKey,
+            envUpdated,
+        });
+        console.log(`[Migration] Generated API key for ${client.company_name} (${client.subdomain})`);
+    }
+    return (0, response_1.SuccessResponse)(res, {
+        message: `Generated API keys for ${results.length} existing clients. Store these keys securely — they will not be shown again!`,
+        data: { generated: results.length, clients: results }
+    }, 200);
 });

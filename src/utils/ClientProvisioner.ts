@@ -179,7 +179,8 @@ export async function generateBackendEnv(
     destDir: string,
     clientName: string,
     frontendUrl: string,
-    dbConfig: { dbName: string; dbUser: string; dbPass: string }
+    dbConfig: { dbName: string; dbUser: string; dbPass: string },
+    superSystegoApiKey?: string
 ) {
     const envPath = path.join(destDir, '.env');
 
@@ -195,6 +196,10 @@ JWT_SECRET=${generateRandomSecret()}
 
 VERSION_UPDATER_URL=https://updater.systego.net
 VERSION_UPDATER_API_KEY=${process.env.VERSION_UPDATER_API_KEY}
+
+# Super Systego Integration (Package Verification)
+SUPER_SYSTEGO_URL=${process.env.SUPER_SYSTEGO_URL || 'https://super-api.systego.net'}
+SUPER_SYSTEGO_API_KEY=${superSystegoApiKey || 'NOT_SET'}
 
 # MongoDB Configuration
 MongoDB_URI=mongodb://${dbConfig.dbUser}:${dbConfig.dbPass}@127.0.0.1:27017/${dbConfig.dbName}?authSource=admin

@@ -29,6 +29,8 @@ export const create = async (req: Request, res: Response) => {
     half_yearly_price,
     yearly_price,
     status,
+    haveEcommerce,
+    haveMobileApp
   } = req.body;
 
   const new_package = await PackageModel.create({
@@ -39,6 +41,8 @@ export const create = async (req: Request, res: Response) => {
     half_yearly_price,
     yearly_price,
     status,
+    haveEcommerce,
+    haveMobileApp
   });
   return SuccessResponse(res, { message: 'Package created successfully' }, 201);
 };
@@ -48,7 +52,7 @@ export const modify = async (req: Request, res: Response) => {
   const id = req.params.id;
   let package_item = await PackageModel.findById(id);
   if (!package_item) {
-    throw new UnauthorizedError('Package not found');
+    throw new NotFound('Package not found');
   }
 
   const {
@@ -59,15 +63,19 @@ export const modify = async (req: Request, res: Response) => {
     half_yearly_price,
     yearly_price,
     status,
+    haveEcommerce,
+    haveMobileApp
   } = req.body;
 
-  package_item.name = name || package_item.name;
-  package_item.description = description || package_item.description;
-  package_item.monthly_price = monthly_price || package_item.monthly_price;
-  package_item.quarterly_price = quarterly_price || package_item.quarterly_price;
-  package_item.half_yearly_price = half_yearly_price || package_item.half_yearly_price;
-  package_item.yearly_price = yearly_price || package_item.yearly_price;
-  package_item.status = status || package_item.status;
+  package_item.name = name ?? package_item.name;
+  package_item.description = description ?? package_item.description;
+  package_item.monthly_price = monthly_price ?? package_item.monthly_price;
+  package_item.quarterly_price = quarterly_price ?? package_item.quarterly_price;
+  package_item.half_yearly_price = half_yearly_price ?? package_item.half_yearly_price;
+  package_item.yearly_price = yearly_price ?? package_item.yearly_price;
+  package_item.status = status ?? package_item.status;
+  package_item.haveEcommerce = haveEcommerce ?? package_item.haveEcommerce;
+  package_item.haveMobileApp = haveMobileApp ?? package_item.haveMobileApp;
 
   await package_item.save();
 

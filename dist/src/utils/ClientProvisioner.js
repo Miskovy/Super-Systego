@@ -55,12 +55,33 @@ async function provisionNewClient(clientName, dbConfig, logoBase64) {
         if (logoBase64) {
             console.log(`[Provisioning] Injecting custom client logo...`);
             await replaceClientLogo(frontendDestDir, logoBase64);
+            // Also replace logo in the point-of-sale project
+            const posDir = path_1.default.join(frontendDestDir, 'point-of-sale');
+            try {
+                await promises_1.default.access(posDir);
+                console.log(`[Provisioning] Injecting custom client logo into POS project...`);
+                await replaceClientLogo(posDir, logoBase64);
+            }
+            catch {
+                console.log(`[Provisioning] No point-of-sale directory found, skipping POS logo`);
+            }
         }
         // 4. Create the necessary .htaccess for the React frontend
         await generateFrontendHtaccess(frontendDestDir);
         // 4.5. Generate client-specific .env file for the React frontend (fallback)
         await generateFrontendEnv(frontendDestDir, backendSubdomainUrl);
-        // 4.6. INJECT the API URL directly into the compiled Vite bundles!
+        // 4.6. Also generate .env for the point-of-sale project
+        const posFrontendDir = path_1.default.join(frontendDestDir, 'point-of-sale');
+        try {
+            await promises_1.default.access(posFrontendDir);
+            console.log(`[Provisioning] Generating POS .env file...`);
+            await generateFrontendEnv(posFrontendDir, backendSubdomainUrl);
+        }
+        catch {
+            console.log(`[Provisioning] No point-of-sale directory found, skipping POS .env`);
+        }
+        // 4.7. INJECT the API URL directly into the compiled Vite bundles!
+        // This scans recursively, covering both admin and POS bundles
         console.log(`[Provisioning] Injecting dynamic API URLs into React bundles...`);
         await injectApiUrlIntoBundle(frontendDestDir, `https://${backendSubdomainUrl}`);
         // 5. Copy Backend template (Node.js TypeScript dist folder)
@@ -140,7 +161,7 @@ async function copyDirectory(src, dest) {
 /**
  * Helper: Generates the specialized .env file for the client's backend
  */
-async function generateBackendEnv(destDir, clientName, frontendUrl, dbConfig) {
+async function generateBackendEnv(destDir, clientName, frontendUrl, dbConfig, superSystegoApiKey) {
     const envPath = path_1.default.join(destDir, '.env');
     // Customize this based on your backend's required environment variables
     const envContent = `
@@ -154,6 +175,10 @@ JWT_SECRET=${generateRandomSecret()}
 
 VERSION_UPDATER_URL=https://updater.systego.net
 VERSION_UPDATER_API_KEY=${process.env.VERSION_UPDATER_API_KEY}
+
+# Super Systego Integration (Package Verification)
+SUPER_SYSTEGO_URL=${process.env.SUPER_SYSTEGO_URL || 'https://super-api.systego.net'}
+SUPER_SYSTEGO_API_KEY=${superSystegoApiKey || 'NOT_SET'}
 
 # MongoDB Configuration
 MongoDB_URI=mongodb://${dbConfig.dbUser}:${dbConfig.dbPass}@127.0.0.1:27017/${dbConfig.dbName}?authSource=admin
@@ -220,15 +245,32 @@ SHIFT_REPORT_PASSWORD=123456789
     console.log(`[Provisioning] Wrote backend .env file to ${envPath}`);
 }
 /**
- * Helper: Generates .htaccess for React SPA routing
+ * Helper: Generates .htaccess for both the Admin SPA and the Point-of-Sale SPA.
+ * Uses the same proven configuration as the main systego.net domain.
  */
 async function generateFrontendHtaccess(destDir) {
     const htaccessPath = path_1.default.join(destDir, '.htaccess');
     const content = `
-Options -MultiViews
-RewriteEngine On
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteRule ^ index.html [QSA,L]
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    # Redirect /point-of-sale to /point-of-sale/ (with trailing slash)
+    RewriteCond %{REQUEST_URI} ^/point-of-sale$
+    RewriteRule ^(.*)$ /point-of-sale/ [R=301,L]
+
+    # Handle point-of-sale project
+    RewriteCond %{REQUEST_URI} ^/point-of-sale/ [NC]
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^point-of-sale/(.*)$ /point-of-sale/index.html [L]
+
+    # Handle main project (root) - everything else
+    RewriteCond %{REQUEST_URI} !^/point-of-sale/ [NC]
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^(.*)$ /index.html [L]
+</IfModule>
     `.trim();
     await promises_1.default.writeFile(htaccessPath, content, 'utf-8');
     console.log(`[Provisioning] Wrote frontend .htaccess file`);
@@ -305,6 +347,7 @@ async function injectApiUrlIntoBundle(dirPath, newApiUrl) {
     const oldUrlBase = 'https://bcknd.systego.net';
     // Some React apps might use /api appended, some might not. 
     // It's safest to just replace the base domain globally.
+    // NOTE: The POS project uses "Bcknd" (capital B), so we must match case-insensitively.
     async function scanAndReplace(currentDir) {
         const entries = await promises_1.default.readdir(currentDir, { withFileTypes: true });
         for (const entry of entries) {
@@ -312,13 +355,13 @@ async function injectApiUrlIntoBundle(dirPath, newApiUrl) {
             if (entry.isDirectory()) {
                 await scanAndReplace(fullPath);
             }
-            else if (entry.isFile() && (entry.name.endsWith('.js') || entry.name.endsWith('.html') || entry.name.endsWith('.json'))) {
+            else if (entry.isFile() && (entry.name.endsWith('.js') || entry.name.endsWith('.html') || entry.name.endsWith('.json') || entry.name === '.env')) {
                 try {
                     let content = await promises_1.default.readFile(fullPath, 'utf8');
-                    if (content.includes(oldUrlBase)) {
-                        // Replace all occurrences globally
-                        // Use a global regex to catch every instance
-                        const regex = new RegExp(oldUrlBase.replace(/[.*/+?^${}()|[\]\\]/g, '\\$&'), 'g');
+                    // Case-insensitive check to catch both "bcknd" and "Bcknd"
+                    if (content.toLowerCase().includes(oldUrlBase.toLowerCase())) {
+                        // Replace all occurrences globally, case-insensitive
+                        const regex = new RegExp(oldUrlBase.replace(/[.*\/+?^${}()|[\]\\]/g, '\\$&'), 'gi');
                         content = content.replace(regex, newApiUrl);
                         await promises_1.default.writeFile(fullPath, content, 'utf8');
                         console.log(`[Provisioning] Injected new API URL into: ${entry.name}`);
@@ -648,8 +691,19 @@ async function getClientLogoBase64(clientName) {
 }
 /**
  * Updates the client's logo on an existing provisioned frontend.
+ * Also updates the logo in the point-of-sale project if it exists.
  */
 async function updateClientLogo(clientName, logoBase64) {
     const destDir = path_1.default.join(PLESK_VHOSTS_DIR, clientName);
     await replaceClientLogo(destDir, logoBase64);
+    // Also replace logo in the point-of-sale project
+    const posDir = path_1.default.join(destDir, 'point-of-sale');
+    try {
+        await promises_1.default.access(posDir);
+        await replaceClientLogo(posDir, logoBase64);
+        console.log(`[Provisioning] Also updated logo in POS project`);
+    }
+    catch {
+        // POS directory doesn't exist, skip silently
+    }
 }

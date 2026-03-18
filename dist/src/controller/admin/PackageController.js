@@ -20,7 +20,7 @@ const getById = async (req, res) => {
 };
 exports.getById = getById;
 const create = async (req, res) => {
-    const { name, description, monthly_price, quarterly_price, half_yearly_price, yearly_price, status, } = req.body;
+    const { name, description, monthly_price, quarterly_price, half_yearly_price, yearly_price, status, haveEcommerce, haveMobileApp } = req.body;
     const new_package = await Package_1.PackageModel.create({
         name,
         description,
@@ -29,6 +29,8 @@ const create = async (req, res) => {
         half_yearly_price,
         yearly_price,
         status,
+        haveEcommerce,
+        haveMobileApp
     });
     return (0, response_1.SuccessResponse)(res, { message: 'Package created successfully' }, 201);
 };
@@ -37,16 +39,18 @@ const modify = async (req, res) => {
     const id = req.params.id;
     let package_item = await Package_1.PackageModel.findById(id);
     if (!package_item) {
-        throw new Errors_1.UnauthorizedError('Package not found');
+        throw new Errors_1.NotFound('Package not found');
     }
-    const { name, description, monthly_price, quarterly_price, half_yearly_price, yearly_price, status, } = req.body;
-    package_item.name = name || package_item.name;
-    package_item.description = description || package_item.description;
-    package_item.monthly_price = monthly_price || package_item.monthly_price;
-    package_item.quarterly_price = quarterly_price || package_item.quarterly_price;
-    package_item.half_yearly_price = half_yearly_price || package_item.half_yearly_price;
-    package_item.yearly_price = yearly_price || package_item.yearly_price;
-    package_item.status = status || package_item.status;
+    const { name, description, monthly_price, quarterly_price, half_yearly_price, yearly_price, status, haveEcommerce, haveMobileApp } = req.body;
+    package_item.name = name ?? package_item.name;
+    package_item.description = description ?? package_item.description;
+    package_item.monthly_price = monthly_price ?? package_item.monthly_price;
+    package_item.quarterly_price = quarterly_price ?? package_item.quarterly_price;
+    package_item.half_yearly_price = half_yearly_price ?? package_item.half_yearly_price;
+    package_item.yearly_price = yearly_price ?? package_item.yearly_price;
+    package_item.status = status ?? package_item.status;
+    package_item.haveEcommerce = haveEcommerce ?? package_item.haveEcommerce;
+    package_item.haveMobileApp = haveMobileApp ?? package_item.haveMobileApp;
     await package_item.save();
     return (0, response_1.SuccessResponse)(res, { message: 'package updated successfully' }, 200);
 };

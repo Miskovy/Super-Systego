@@ -13,5 +13,7 @@ const PackageSchema = new mongoose_1.default.Schema({
     half_yearly_price: { type: Number, required: true },
     yearly_price: { type: Number, required: true },
     status: { type: Boolean },
+    haveEcommerce: { type: Boolean, default: false },
+    haveMobileApp: { type: Boolean, default: false }
 }, { timestamps: true, });
 exports.PackageModel = mongoose_1.default.model('Package', PackageSchema);
