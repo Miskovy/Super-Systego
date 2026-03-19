@@ -177,7 +177,7 @@ VERSION_UPDATER_URL=https://updater.systego.net
 VERSION_UPDATER_API_KEY=${process.env.VERSION_UPDATER_API_KEY}
 
 # Super Systego Integration (Package Verification)
-SUPER_SYSTEGO_URL=${process.env.SUPER_SYSTEGO_URL || 'https://super-api.systego.net'}
+SUPER_SYSTEGO_URL=${process.env.SUPER_SYSTEGO_URL || 'https://superback.systego.net'}
 SUPER_SYSTEGO_API_KEY=${superSystegoApiKey || 'NOT_SET'}
 
 # MongoDB Configuration
