@@ -58,14 +58,16 @@ export async function provisionNewClient(
             console.log(`[Provisioning] Injecting custom client logo...`);
             await replaceClientLogo(frontendDestDir, logoBase64);
 
-            // Also replace logo in the point-of-sale project
-            const posDir = path.join(frontendDestDir, 'point-of-sale');
-            try {
-                await fs.access(posDir);
-                console.log(`[Provisioning] Injecting custom client logo into POS project...`);
-                await replaceClientLogo(posDir, logoBase64);
-            } catch {
-                console.log(`[Provisioning] No point-of-sale directory found, skipping POS logo`);
+            // Also replace logo in sub-projects (point-of-sale, ecommerce)
+            for (const subProject of ['point-of-sale', 'ecommerce']) {
+                const subDir = path.join(frontendDestDir, subProject);
+                try {
+                    await fs.access(subDir);
+                    console.log(`[Provisioning] Injecting custom client logo into ${subProject} project...`);
+                    await replaceClientLogo(subDir, logoBase64);
+                } catch {
+                    console.log(`[Provisioning] No ${subProject} directory found, skipping logo`);
+                }
             }
         }
 
@@ -75,14 +77,16 @@ export async function provisionNewClient(
         // 4.5. Generate client-specific .env file for the React frontend (fallback)
         await generateFrontendEnv(frontendDestDir, backendSubdomainUrl);
 
-        // 4.6. Also generate .env for the point-of-sale project
-        const posFrontendDir = path.join(frontendDestDir, 'point-of-sale');
-        try {
-            await fs.access(posFrontendDir);
-            console.log(`[Provisioning] Generating POS .env file...`);
-            await generateFrontendEnv(posFrontendDir, backendSubdomainUrl);
-        } catch {
-            console.log(`[Provisioning] No point-of-sale directory found, skipping POS .env`);
+        // 4.6. Also generate .env for sub-projects (point-of-sale, ecommerce)
+        for (const subProject of ['point-of-sale', 'ecommerce']) {
+            const subFrontendDir = path.join(frontendDestDir, subProject);
+            try {
+                await fs.access(subFrontendDir);
+                console.log(`[Provisioning] Generating ${subProject} .env file...`);
+                await generateFrontendEnv(subFrontendDir, backendSubdomainUrl);
+            } catch {
+                console.log(`[Provisioning] No ${subProject} directory found, skipping .env`);
+            }
         }
 
         // 4.7. INJECT the API URL directly into the compiled Vite bundles!
@@ -278,18 +282,37 @@ async function generateFrontendHtaccess(destDir: string) {
     RewriteEngine On
     RewriteBase /
 
-    # Redirect /point-of-sale to /point-of-sale/ (with trailing slash)
-    RewriteCond %{REQUEST_URI} ^/point-of-sale$
-    RewriteRule ^(.*)$ /point-of-sale/ [R=301,L]
+    # 1. Add trailing slash for sub-projects if missing
+    RewriteCond %{REQUEST_URI} ^/(point-of-sale|admin-login|ecommerce)$
+    RewriteRule ^(.*)$ /%1/ [R=301,L]
 
-    # Handle point-of-sale project
-    RewriteCond %{REQUEST_URI} ^/point-of-sale/ [NC]
+    # 2. Handle Point of Sale SPA
+    RewriteCond %{REQUEST_URI} ^/point-of-sale/
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteRule ^point-of-sale/(.*)$ /point-of-sale/index.html [L]
 
-    # Handle main project (root) - everything else
-    RewriteCond %{REQUEST_URI} !^/point-of-sale/ [NC]
+    # 3. Handle Admin Login SPA
+    RewriteCond %{REQUEST_URI} ^/admin-login/
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^admin-login/(.*)$ /admin-login/index.html [L]
+
+    # 4. Handle Ecommerce SPA
+    RewriteCond %{REQUEST_URI} ^/ecommerce/
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ecommerce/(.*)$ /ecommerce/index.html [L]
+
+    # 5. Handle main project (Next.js style .html extension fallback)
+    RewriteCond %{REQUEST_URI} !^/(point-of-sale|admin-login|ecommerce)
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME}.html -f
+    RewriteRule ^(.*)$ $1.html [L]
+
+    # 6. Fallback to root index.html for main project
+    RewriteCond %{REQUEST_URI} !^/(point-of-sale|admin-login|ecommerce)
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteRule ^(.*)$ /index.html [L]
@@ -759,19 +782,21 @@ export async function getClientLogoBase64(clientName: string): Promise<string | 
 
 /**
  * Updates the client's logo on an existing provisioned frontend.
- * Also updates the logo in the point-of-sale project if it exists.
+ * Also updates the logo in sub-projects (point-of-sale, ecommerce) if they exist.
  */
 export async function updateClientLogo(clientName: string, logoBase64: string) {
     const destDir = path.join(PLESK_VHOSTS_DIR, clientName);
     await replaceClientLogo(destDir, logoBase64);
 
-    // Also replace logo in the point-of-sale project
-    const posDir = path.join(destDir, 'point-of-sale');
-    try {
-        await fs.access(posDir);
-        await replaceClientLogo(posDir, logoBase64);
-        console.log(`[Provisioning] Also updated logo in POS project`);
-    } catch {
-        // POS directory doesn't exist, skip silently
+    // Also replace logo in sub-projects
+    for (const subProject of ['point-of-sale', 'ecommerce']) {
+        const subDir = path.join(destDir, subProject);
+        try {
+            await fs.access(subDir);
+            await replaceClientLogo(subDir, logoBase64);
+            console.log(`[Provisioning] Also updated logo in ${subProject} project`);
+        } catch {
+            // Sub-project directory doesn't exist, skip silently
+        }
     }
 }
