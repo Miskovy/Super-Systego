@@ -34,20 +34,20 @@ exports.getThemeBySlug = (0, express_async_handler_1.default)(async (req, res) =
     return (0, response_1.SuccessResponse)(res, { message: 'Theme retrieved successfully', data: theme }, 200);
 });
 exports.createTheme = (0, express_async_handler_1.default)(async (req, res) => {
-    const { name, thumbnailUrl, slug, categoryId, sections, defaultConfig, isBase } = req.body;
-    const existingTheme = await Theme_1.ThemeModel.findOne({ slug: slug.toLowerCase().replace(/ /g, '-') });
+    const { name, image, categoryId, sections, defaultConfig, isBase } = req.body;
+    const existingTheme = await Theme_1.ThemeModel.findOne({ slug: name.toLowerCase().replace(/ /g, '-') });
     if (existingTheme) {
         throw new BadRequest_1.BadRequest('Theme with this slug already exists');
     }
-    const imageUrl = (0, handleImages_1.saveBase64Image)(thumbnailUrl, req.user?.id, req, 'themes'); // Save the image and get the URL
+    const thumbnailUrl = (0, handleImages_1.saveBase64Image)(image, req.user?.id, req, 'themes'); // Save the image and get the URL
     const newTheme = await Theme_1.ThemeModel.create({
         name,
-        slug: slug.toLowerCase().replace(/ /g, '-'),
+        slug: name.toLowerCase().replace(/ /g, '-'),
         categoryId,
         sections,
         defaultConfig,
         isBase,
-        thumbnailUrl: imageUrl
+        thumbnailUrl
     });
     return (0, response_1.SuccessResponse)(res, { message: 'Theme created successfully', data: newTheme }, 201);
 });
