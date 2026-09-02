@@ -4,7 +4,8 @@ import CouponRouter from "./CouponRoutes";
 import PackageRouter from "./PackageRoutes";
 import ClientRoutes from "./clientRoutes";
 import PaymentMethodRoutes from "./paymentMethodRoutes";
-import ThemeRoutes from "./themesRoutes";
+import ThemeRoutes from "./ThemesRoutes";
+import ThemeCategoryRoutes from "./ThemeCategoryRoutes";
 import router from "./clientRoutes";
 //import { authenticated } from "../../middlewares/authenticated";
 //import {  authorizeRoles } from "../../middlewares/authorized";
@@ -19,5 +20,6 @@ route.use("/packages", PackageRouter);
 route.use("/clients", ClientRoutes);
 route.use("/payment-methods", PaymentMethodRoutes);
 route.use("/themes", ThemeRoutes);
+route.use("/theme-categories", ThemeCategoryRoutes);
 
 export default route;

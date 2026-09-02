@@ -1,15 +1,14 @@
 import { Router } from 'express';
-import { getAllThemes, getThemeById, createTheme, updateTheme, deleteTheme } from '../../controller/admin/themesController';
-import { createThemeValidator, updateThemeValidator } from '../../validation/admin/themesValidator';
-import { validate } from '../../middlewares/validation';
- import { authenticated } from '../../middlewares/authenticated';
+import { getAllThemes, getThemeById, createTheme, updateTheme, deleteTheme, bulkCreateThemes, getThemeBySlug } from '../../controller/admin/themesController';
+import { authenticated } from '../../middlewares/authenticated';
 const router = Router();
-router.use(authenticated);
 
 router.get('/', getAllThemes);
 router.get('/:id', getThemeById);
-router.post('/', validate(createThemeValidator), createTheme);
-router.put('/:id', validate(updateThemeValidator), updateTheme);
+router.get('/slug/:slug', getThemeBySlug);
+router.post('/', createTheme);
+router.post('/bulk', bulkCreateThemes);
+router.put('/:id', updateTheme);
 router.delete('/:id', deleteTheme);
 
 export default router;
