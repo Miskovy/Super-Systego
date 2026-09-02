@@ -1,0 +1,11 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const ThemesCategoryController_1 = require("../../controller/admin/ThemesCategoryController");
+const router = (0, express_1.Router)();
+router.get('/', ThemesCategoryController_1.getAllThemeCategories);
+router.get('/:id', ThemesCategoryController_1.getThemeCategoryById);
+router.post('/', ThemesCategoryController_1.createThemeCategory);
+router.put('/:id', ThemesCategoryController_1.updateThemeCategory);
+router.delete('/:id', ThemesCategoryController_1.deleteThemeCategory);
+exports.default = router;
