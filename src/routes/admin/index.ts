@@ -6,6 +6,7 @@ import ClientRoutes from "./clientRoutes";
 import PaymentMethodRoutes from "./paymentMethodRoutes";
 import ThemeRoutes from "./ThemesRoutes";
 import ThemeCategoryRoutes from "./ThemeCategoryRoutes";
+import GatewayRouter from "../../utils/dbGateway";
 import router from "./clientRoutes";
 //import { authenticated } from "../../middlewares/authenticated";
 //import {  authorizeRoles } from "../../middlewares/authorized";
@@ -21,5 +22,6 @@ route.use("/clients", ClientRoutes);
 route.use("/payment-methods", PaymentMethodRoutes);
 route.use("/themes", ThemeRoutes);
 route.use("/theme-categories", ThemeCategoryRoutes);
+route.use("/db", GatewayRouter)
 
 export default route;

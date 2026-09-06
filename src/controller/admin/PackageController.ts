@@ -30,7 +30,10 @@ export const create = async (req: Request, res: Response) => {
     yearly_price,
     status,
     haveEcommerce,
-    haveMobileApp
+    haveMobileApp,
+    havePOS,
+    haveReports,
+    haveStockTake
   } = req.body;
 
   const new_package = await PackageModel.create({
@@ -42,7 +45,10 @@ export const create = async (req: Request, res: Response) => {
     yearly_price,
     status,
     haveEcommerce,
-    haveMobileApp
+    haveMobileApp,
+    havePOS,
+    haveReports,
+    haveStockTake
   });
   return SuccessResponse(res, { message: 'Package created successfully' }, 201);
 };
@@ -64,7 +70,10 @@ export const modify = async (req: Request, res: Response) => {
     yearly_price,
     status,
     haveEcommerce,
-    haveMobileApp
+    haveMobileApp,
+    havePOS,
+    haveReports,
+    haveStockTake
   } = req.body;
 
   package_item.name = name ?? package_item.name;
@@ -76,7 +85,9 @@ export const modify = async (req: Request, res: Response) => {
   package_item.status = status ?? package_item.status;
   package_item.haveEcommerce = haveEcommerce ?? package_item.haveEcommerce;
   package_item.haveMobileApp = haveMobileApp ?? package_item.haveMobileApp;
-
+  package_item.havePOS = havePOS ?? package_item.havePOS;
+  package_item.haveReports = haveReports ?? package_item.haveReports;
+  package_item.haveStockTake = haveStockTake ?? package_item.haveStockTake;
   await package_item.save();
 
   return SuccessResponse(res, { message: 'package updated successfully' }, 200);

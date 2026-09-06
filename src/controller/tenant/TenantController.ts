@@ -26,7 +26,7 @@ export const verifyTenant = asyncHandler(async (req: Request, res: Response) => 
         .select('company_name subdomain status package_id')
         .populate({
             path: 'package_id',
-            select: 'name status haveEcommerce haveMobileApp'
+            select: 'name status haveEcommerce haveMobileApp havePOS haveReports haveStockTake',
         });
 
     if (!client) {
