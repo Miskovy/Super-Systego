@@ -1,0 +1,46 @@
+{
+    "success": true,
+    "data": {
+        "message": "Generated API keys for 5 existing clients. Store these keys securely — they will not be shown again!",
+        "data": {
+            "generated": 5,
+            "clients": [
+                {
+                    "clientId": "6a8be7aa4c66d0a77d41d3f9",
+                    "companyName": "El Rayan Bike Store",
+                    "subdomain": "elrayan",
+                    "apiKey": "sk_c03ecff1-a791-42a3-8ba6-5b8c2e1411ba_df78ded570cb9fe71b114a8c69778045",
+                    "envUpdated": false
+                },
+                {
+                    "clientId": "6a8d887953320435314c807b",
+                    "companyName": "Samar Store",
+                    "subdomain": "samarstore",
+                    "apiKey": "sk_4f6dc1cc-3823-4a47-bc5c-e5f380eb3bb5_4374f559329a71da8fd8aab3401b9c18",
+                    "envUpdated": false
+                },
+                {
+                    "clientId": "6a8d89ddd2fa967e6128eaa0",
+                    "companyName": "sayed store",
+                    "subdomain": "sayedstore",
+                    "apiKey": "sk_61221195-71c5-4302-ba6e-3b5221db59a6_83f87d10b67ef5ff3588f66d8c1552a4",
+                    "envUpdated": false
+                },
+                {
+                    "clientId": "6a8d8a433eb806db5409b0b2",
+                    "companyName": "Ayman Store",
+                    "subdomain": "aymanstore",
+                    "apiKey": "sk_61b2ac6a-586a-48da-a219-871092604434_f13b24ca7c14fdccc219ab5657e6bd7e",
+                    "envUpdated": false
+                },
+                {
+                    "clientId": "6a96c5f829dbdc342be03793",
+                    "companyName": "Zaino",
+                    "subdomain": "zaino",
+                    "apiKey": "sk_bd53c562-5e78-43d0-8d10-8e2ed5cad6f8_86b13ecbf3f998511e09d867405f03ed",
+                    "envUpdated": false
+                }
+            ]
+        }
+    }
+}

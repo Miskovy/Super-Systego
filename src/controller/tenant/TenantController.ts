@@ -44,6 +44,9 @@ export const verifyTenant = asyncHandler(async (req: Request, res: Response) => 
         features: {
             haveEcommerce: packageData?.haveEcommerce ?? false,
             haveMobileApp: packageData?.haveMobileApp ?? false,
+            havePOS: packageData?.havePOS ?? false,
+            haveReports: packageData?.haveReports ?? false,
+            haveStockTake: packageData?.haveStockTake ?? false,
         },
         package: {
             name: packageData?.name ?? null,

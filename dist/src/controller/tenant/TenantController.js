@@ -28,7 +28,7 @@ exports.verifyTenant = (0, express_async_handler_1.default)(async (req, res) => 
         .select('company_name subdomain status package_id')
         .populate({
         path: 'package_id',
-        select: 'name status haveEcommerce haveMobileApp'
+        select: 'name status haveEcommerce haveMobileApp havePOS haveReports haveStockTake',
     });
     if (!client) {
         throw new NotFound_1.NotFound('Tenant not found');
@@ -43,6 +43,9 @@ exports.verifyTenant = (0, express_async_handler_1.default)(async (req, res) => 
         features: {
             haveEcommerce: packageData?.haveEcommerce ?? false,
             haveMobileApp: packageData?.haveMobileApp ?? false,
+            havePOS: packageData?.havePOS ?? false,
+            haveReports: packageData?.haveReports ?? false,
+            haveStockTake: packageData?.haveStockTake ?? false,
         },
         package: {
             name: packageData?.name ?? null,

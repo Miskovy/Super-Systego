@@ -20,7 +20,7 @@ const getById = async (req, res) => {
 };
 exports.getById = getById;
 const create = async (req, res) => {
-    const { name, description, monthly_price, quarterly_price, half_yearly_price, yearly_price, status, haveEcommerce, haveMobileApp } = req.body;
+    const { name, description, monthly_price, quarterly_price, half_yearly_price, yearly_price, status, haveEcommerce, haveMobileApp, havePOS, haveReports, haveStockTake } = req.body;
     const new_package = await Package_1.PackageModel.create({
         name,
         description,
@@ -30,7 +30,10 @@ const create = async (req, res) => {
         yearly_price,
         status,
         haveEcommerce,
-        haveMobileApp
+        haveMobileApp,
+        havePOS,
+        haveReports,
+        haveStockTake
     });
     return (0, response_1.SuccessResponse)(res, { message: 'Package created successfully' }, 201);
 };
@@ -41,7 +44,7 @@ const modify = async (req, res) => {
     if (!package_item) {
         throw new Errors_1.NotFound('Package not found');
     }
-    const { name, description, monthly_price, quarterly_price, half_yearly_price, yearly_price, status, haveEcommerce, haveMobileApp } = req.body;
+    const { name, description, monthly_price, quarterly_price, half_yearly_price, yearly_price, status, haveEcommerce, haveMobileApp, havePOS, haveReports, haveStockTake } = req.body;
     package_item.name = name ?? package_item.name;
     package_item.description = description ?? package_item.description;
     package_item.monthly_price = monthly_price ?? package_item.monthly_price;
@@ -51,6 +54,9 @@ const modify = async (req, res) => {
     package_item.status = status ?? package_item.status;
     package_item.haveEcommerce = haveEcommerce ?? package_item.haveEcommerce;
     package_item.haveMobileApp = haveMobileApp ?? package_item.haveMobileApp;
+    package_item.havePOS = havePOS ?? package_item.havePOS;
+    package_item.haveReports = haveReports ?? package_item.haveReports;
+    package_item.haveStockTake = haveStockTake ?? package_item.haveStockTake;
     await package_item.save();
     return (0, response_1.SuccessResponse)(res, { message: 'package updated successfully' }, 200);
 };
