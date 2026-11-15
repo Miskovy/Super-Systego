@@ -5,7 +5,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.seedTenantCashierRole = exports.buildCashierRoleData = exports.CASHIER_MODULE_DEFINITIONS = void 0;
 const mongoose_1 = __importDefault(require("mongoose"));
-
 exports.CASHIER_MODULE_DEFINITIONS = [
     { module: 'category', actions: ["View", "Add", "Edit", "Delete", "Status"] },
     { module: 'product', actions: ["View", "Add", "Edit", "Delete", "Status"] },
@@ -28,19 +27,16 @@ exports.CASHIER_MODULE_DEFINITIONS = [
     { module: 'warehouse', actions: ["View"] },
     { module: 'all_returns', actions: ["View", "Add", "Edit", "Delete", "Status"] },
 ];
-
 const buildCashierRoleData = () => {
-    const mongooseInstance = mongoose_1.default || mongoose_1;
-    const ObjectId = (mongooseInstance.Types && mongooseInstance.Types.ObjectId) || mongooseInstance.ObjectId;
     const permissions = exports.CASHIER_MODULE_DEFINITIONS.map((item) => ({
         module: item.module,
         actions: item.actions.map((act) => ({
-            _id: new ObjectId(),
+            _id: new mongoose_1.default.Types.ObjectId(),
             action: act,
         })),
     }));
     return {
-        _id: new ObjectId(),
+        _id: new mongoose_1.default.Types.ObjectId(),
         name: 'Cashier',
         status: 'active',
         permissions,
@@ -49,14 +45,14 @@ const buildCashierRoleData = () => {
     };
 };
 exports.buildCashierRoleData = buildCashierRoleData;
-
 const seedTenantCashierRole = async (tenantDbConnection) => {
     const rolesCollection = 'roles';
+    // Ensure collection exists
     try {
         await tenantDbConnection.createCollection(rolesCollection);
     }
     catch (err) {
-        // Collection might already exist
+        // Collection might already exist, ignore namespace exists error
     }
     const existingRole = await tenantDbConnection
         .collection(rolesCollection)

@@ -5,10 +5,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importDefault(require("mongoose"));
 const dotenv_1 = __importDefault(require("dotenv"));
+// Load env
 dotenv_1.default.config();
 const Client_1 = require("../models/schema/auth/Client");
 const seedTenantRoles_1 = require("../utils/seedTenantRoles");
-
 async function seedCashierRole() {
     try {
         const mongoUri = process.env.MongoDB_URI || process.env.MONGO_URI;

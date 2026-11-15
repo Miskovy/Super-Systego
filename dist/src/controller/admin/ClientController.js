@@ -497,6 +497,12 @@ exports.generateApiKeysForExistingClients = (0, express_async_handler_1.default)
         data: { generated: results.length, clients: results }
     }, 200);
 });
+/**
+ * POST /api/admin/clients/seed-cashier-role
+ *
+ * Migration endpoint: Seeds the default Cashier role into all existing tenant databases
+ * if they don't already have one.
+ */
 exports.seedCashierRoleForExistingClients = (0, express_async_handler_1.default)(async (req, res) => {
     const allClients = await Client_1.ClientModel.find().select('_id company_name subdomain db_name');
     const results = [];
