@@ -20,6 +20,7 @@ import {
 } from '../../utils/ClientProvisioner';
 import { executePleskCli } from '../../utils/PleskService';
 import { TenantApiKeyModel } from '../../models/schema/auth/TenantApiKey';
+import { seedTenantCashierRole } from '../../utils/seedTenantRoles';
 
 export const getAllClients = asyncHandler(async (req, res) => {
   const clients = await ClientModel.find()
@@ -129,11 +130,19 @@ export const createClient = asyncHandler(async (req, res) => {
       updatedAt: new Date()
     });
 
-    console.log(`Database ${dbName} created and seeded with compliant superadmin`);
+    // 3. Seed default Cashier role in the 'roles' collection
+    await seedTenantCashierRole(newDbConnection);
+
+    console.log(`Database ${dbName} created and seeded with compliant superadmin and Cashier role`);
   } catch (error: any) {
     console.error('Failed to create client database:', error);
     // Rollback: delete the client record
     await ClientModel.findByIdAndDelete(client._id);
+    try {
+      await mongoose.connection.useDb(dbName, { useCache: true }).dropDatabase();
+    } catch (dropErr) {
+      console.warn('Could not drop partially created database during rollback', dropErr);
+    }
     throw new Error(`Failed to create client database: ${error.message || error}. Client creation rolled back.`);
   }
 
@@ -589,5 +598,74 @@ export const generateApiKeysForExistingClients = asyncHandler(async (req, res) =
   return SuccessResponse(res, {
     message: `Generated API keys for ${results.length} existing clients. Store these keys securely — they will not be shown again!`,
     data: { generated: results.length, clients: results }
+  }, 200);
+});
+
+/**
+ * POST /api/admin/clients/seed-cashier-role
+ * 
+ * Migration endpoint: Seeds the default Cashier role into all existing tenant databases
+ * if they don't already have one.
+ */
+export const seedCashierRoleForExistingClients = asyncHandler(async (req, res) => {
+  const allClients = await ClientModel.find().select('_id company_name subdomain db_name');
+
+  const results: Array<{
+    clientId: string;
+    companyName: string | undefined;
+    subdomain: string | undefined;
+    dbName: string;
+    status: 'seeded' | 'already_exists' | 'failed';
+    error?: string;
+  }> = [];
+
+  for (const client of allClients) {
+    const dbName = client.db_name || `sc_${client._id}`;
+    try {
+      const clientDbConnection = mongoose.connection.useDb(dbName, { useCache: true });
+      const rolesCollection = 'roles';
+      const existingRole = await clientDbConnection
+        .collection(rolesCollection)
+        .findOne({ name: { $regex: /^cashier$/i } });
+
+      if (existingRole) {
+        results.push({
+          clientId: client._id.toString(),
+          companyName: client.company_name,
+          subdomain: client.subdomain,
+          dbName,
+          status: 'already_exists',
+        });
+      } else {
+        await seedTenantCashierRole(clientDbConnection);
+        results.push({
+          clientId: client._id.toString(),
+          companyName: client.company_name,
+          subdomain: client.subdomain,
+          dbName,
+          status: 'seeded',
+        });
+      }
+    } catch (err: any) {
+      results.push({
+        clientId: client._id.toString(),
+        companyName: client.company_name,
+        subdomain: client.subdomain,
+        dbName,
+        status: 'failed',
+        error: err.message,
+      });
+    }
+  }
+
+  return SuccessResponse(res, {
+    message: `Processed Cashier role seeding for ${allClients.length} clients`,
+    data: {
+      total: allClients.length,
+      seeded: results.filter((r) => r.status === 'seeded').length,
+      alreadyExists: results.filter((r) => r.status === 'already_exists').length,
+      failed: results.filter((r) => r.status === 'failed').length,
+      details: results,
+    },
   }, 200);
 });

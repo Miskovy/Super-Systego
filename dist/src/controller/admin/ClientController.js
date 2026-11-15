@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.generateApiKeysForExistingClients = exports.regenerateApiKey = exports.viewSelection = exports.installClientSsl = exports.select = exports.regenerateClientEnv = exports.deployClientBackend = exports.rebuildClientFrontend = exports.getClientsByStatus = exports.deleteClient = exports.updateClient = exports.createClient = exports.getClientById = exports.getAllClients = void 0;
+exports.seedCashierRoleForExistingClients = exports.generateApiKeysForExistingClients = exports.regenerateApiKey = exports.viewSelection = exports.installClientSsl = exports.select = exports.regenerateClientEnv = exports.deployClientBackend = exports.rebuildClientFrontend = exports.getClientsByStatus = exports.deleteClient = exports.updateClient = exports.createClient = exports.getClientById = exports.getAllClients = void 0;
 const Client_1 = require("../../models/schema/auth/Client");
 const mongoose_1 = __importDefault(require("mongoose"));
 const express_async_handler_1 = __importDefault(require("express-async-handler"));
@@ -16,6 +16,7 @@ const PleskService_1 = require("../../utils/PleskService");
 const ClientProvisioner_1 = require("../../utils/ClientProvisioner");
 const PleskService_2 = require("../../utils/PleskService");
 const TenantApiKey_1 = require("../../models/schema/auth/TenantApiKey");
+const seedTenantRoles_1 = require("../../utils/seedTenantRoles");
 exports.getAllClients = (0, express_async_handler_1.default)(async (req, res) => {
     const clients = await Client_1.ClientModel.find()
         .select('-password -logoBase64 -admin_password') // Exclude heavy payloads & secrets
@@ -106,12 +107,20 @@ exports.createClient = (0, express_async_handler_1.default)(async (req, res) => 
             createdAt: new Date(),
             updatedAt: new Date()
         });
-        console.log(`Database ${dbName} created and seeded with compliant superadmin`);
+        // 3. Seed default Cashier role in the 'roles' collection
+        await (0, seedTenantRoles_1.seedTenantCashierRole)(newDbConnection);
+        console.log(`Database ${dbName} created and seeded with compliant superadmin and Cashier role`);
     }
     catch (error) {
         console.error('Failed to create client database:', error);
         // Rollback: delete the client record
         await Client_1.ClientModel.findByIdAndDelete(client._id);
+        try {
+            await mongoose_1.default.connection.useDb(dbName, { useCache: true }).dropDatabase();
+        }
+        catch (dropErr) {
+            console.warn('Could not drop partially created database during rollback', dropErr);
+        }
         throw new Error(`Failed to create client database: ${error.message || error}. Client creation rolled back.`);
     }
     // --- Provision the Client (Create Subdomains & Copy Files) ---
@@ -486,5 +495,58 @@ exports.generateApiKeysForExistingClients = (0, express_async_handler_1.default)
     return (0, response_1.SuccessResponse)(res, {
         message: `Generated API keys for ${results.length} existing clients. Store these keys securely — they will not be shown again!`,
         data: { generated: results.length, clients: results }
+    }, 200);
+});
+exports.seedCashierRoleForExistingClients = (0, express_async_handler_1.default)(async (req, res) => {
+    const allClients = await Client_1.ClientModel.find().select('_id company_name subdomain db_name');
+    const results = [];
+    for (const client of allClients) {
+        const dbName = client.db_name || `sc_${client._id}`;
+        try {
+            const clientDbConnection = mongoose_1.default.connection.useDb(dbName, { useCache: true });
+            const rolesCollection = 'roles';
+            const existingRole = await clientDbConnection
+                .collection(rolesCollection)
+                .findOne({ name: { $regex: /^cashier$/i } });
+            if (existingRole) {
+                results.push({
+                    clientId: client._id.toString(),
+                    companyName: client.company_name,
+                    subdomain: client.subdomain,
+                    dbName,
+                    status: 'already_exists',
+                });
+            }
+            else {
+                await (0, seedTenantRoles_1.seedTenantCashierRole)(clientDbConnection);
+                results.push({
+                    clientId: client._id.toString(),
+                    companyName: client.company_name,
+                    subdomain: client.subdomain,
+                    dbName,
+                    status: 'seeded',
+                });
+            }
+        }
+        catch (err) {
+            results.push({
+                clientId: client._id.toString(),
+                companyName: client.company_name,
+                subdomain: client.subdomain,
+                dbName,
+                status: 'failed',
+                error: err.message,
+            });
+        }
+    }
+    return (0, response_1.SuccessResponse)(res, {
+        message: `Processed Cashier role seeding for ${allClients.length} clients`,
+        data: {
+            total: allClients.length,
+            seeded: results.filter((r) => r.status === 'seeded').length,
+            alreadyExists: results.filter((r) => r.status === 'already_exists').length,
+            failed: results.filter((r) => r.status === 'failed').length,
+            details: results,
+        },
     }, 200);
 });

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import {
     getAllClients, getClientById, createClient,
     updateClient, deleteClient, select, rebuildClientFrontend, deployClientBackend, viewSelection, regenerateClientEnv, installClientSsl,
-    regenerateApiKey, generateApiKeysForExistingClients
+    regenerateApiKey, generateApiKeysForExistingClients, seedCashierRoleForExistingClients
 } from '../../controller/admin/ClientController';
 import { installClientDependencies, diagnoseClient, testSslInstallation } from '../../utils/ClientProvisioner';
 import { createClientValidator, updateClientValidator } from '../../validation/admin/clientValidator';
@@ -16,6 +16,7 @@ router.use(authenticated);
 router.get('/select', select);
 router.get('/selectionpackages', viewSelection);
 router.post('/generate-all-api-keys', generateApiKeysForExistingClients);
+router.post('/seed-cashier-role', seedCashierRoleForExistingClients);
 router.get('/', getAllClients);
 router.get('/:id', getClientById);
 router.post('/', validate(createClientValidator), createClient);
