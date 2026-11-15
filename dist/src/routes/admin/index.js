@@ -10,7 +10,7 @@ const CouponRoutes_1 = __importDefault(require("./CouponRoutes"));
 const PackageRoutes_1 = __importDefault(require("./PackageRoutes"));
 const clientRoutes_1 = __importDefault(require("./clientRoutes"));
 const paymentMethodRoutes_1 = __importDefault(require("./paymentMethodRoutes"));
-const ThemesRoutes_1 = __importDefault(require("./ThemesRoutes"));
+const ThemesRoutes_1 = __importDefault(require("./themesRoutes"));
 const ThemeCategoryRoutes_1 = __importDefault(require("./ThemeCategoryRoutes"));
 const dbGateway_1 = __importDefault(require("../../utils/dbGateway"));
 //import { authenticated } from "../../middlewares/authenticated";

@@ -4,7 +4,7 @@ import CouponRouter from "./CouponRoutes";
 import PackageRouter from "./PackageRoutes";
 import ClientRoutes from "./clientRoutes";
 import PaymentMethodRoutes from "./paymentMethodRoutes";
-import ThemeRoutes from "./ThemesRoutes";
+import ThemeRoutes from "./themesRoutes";
 import ThemeCategoryRoutes from "./ThemeCategoryRoutes";
 import GatewayRouter from "../../utils/dbGateway";
 import router from "./clientRoutes";
